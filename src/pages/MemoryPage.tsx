@@ -113,7 +113,7 @@ const MemoryPage = () => {
         <Link to="/list" className="bg-blue-400 text-white font-bold py-3 px-6 rounded-full hover:bg-blue-500 transition-colors duration-300">
           View All Entries
         </Link>
-        <a href="https://bobicare.com" target="_blank" rel="noopener noreferrer" className="bg-green-500 text-white font-bold py-3 px-6 rounded-full hover:bg-green-600 transition-colors duration-300">
+        <a href="https://bobicare.com" target="_blank" rel="noopener noreferrer" className="text-sm text-slate-500 hover:text-slate-700 hover:underline transition-colors duration-300">
           Visit Our Store on Amazon
         </a>
       </div>

@@ -1,23 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { useAppContext } from '../App';
 import { BookOpenIcon } from '../components/ui';
 
 const StartPage = () => {
   const { getCreatedEntries, user } = useAppContext();
-  const navigate = useNavigate();
   const [createdEntries, setCreatedEntries] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const entries = getCreatedEntries();
     setCreatedEntries(entries.map(e => e.slug));
-    
-    if (entries.length === 1) {
-      navigate(`/memory/${entries[0].slug}`, { replace: true });
-    } else {
-      setLoading(false);
-    }
+    setLoading(false);
   // The dependency array is carefully constructed to only run this once on mount.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
