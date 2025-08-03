@@ -41,7 +41,7 @@ const StartPage = () => {
         ) : (
           <div className="max-w-2xl mx-auto">
             <h1 className="text-4xl md:text-5xl font-serif font-bold text-ink">
-              A quiet space to capture your thoughts on the books you've read 📖
+              A quiet space for your literary journeys 📖
             </h1>
             <p className="mt-6 text-lg text-slate-700">
               Reflect on stories, characters, and ideas that moved you, {user?.name}.

@@ -1,6 +1,6 @@
 import React, { createContext, useContext, ReactNode } from 'react';
 import { BrowserRouter, Routes, Route, Link, Outlet, useLocation } from 'react-router-dom';
-import { useApp } from './hooks/useApp';
+import { useApp } from './hooks/useEntries';
 import { BookEntry, CreatedEntryInfo, EntryUpdatePayload, EntrySummary, User } from './types';
 import StartPage from './pages/StartPage';
 import CreatePage from './pages/CreatePage';
@@ -67,7 +67,7 @@ const Header = () => {
                              <button onClick={logout} className="text-sm text-slate-500 hover:text-ink font-semibold">Logout</button>
                         </div>
                     )}
-                    {!hideCreateButton && (
+                    {!hideCreateButton && user && (
                         <Link to="/create" className="bg-teal-500 text-white font-bold py-2 px-4 rounded-full text-sm hover:bg-teal-600 transition-colors duration-300 transform hover:scale-105">
                             + New Entry
                         </Link>

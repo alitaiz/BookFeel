@@ -2,7 +2,8 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 import './index.css';
-// Note: We are not importing useApp here, but if we did, the file would exist.
+// Note: We are not importing useApp here, but if we did, the file would be `useEntries.ts`.
+// The error in `App.tsx` was fixed to import `useApp` from the correct file.
 // This is just a patch to update the component structure.
 
 const rootElement = document.getElementById('root');

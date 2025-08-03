@@ -37,7 +37,7 @@ const ListPage = () => {
     const ownedEntry = createdEntries.find(cm => cm.slug === slug);
 
     if (ownedEntry) {
-      if (window.confirm("Are you sure you want to permanently delete this entry? This will remove all data and photos forever and cannot be undone.")) {
+      if (window.confirm("Are you sure you want to permanently delete this entry? This action cannot be undone.")) {
         const result = await deleteEntry(slug, ownedEntry.editKey);
         if (result.success) {
           loadEntries();
