@@ -1,0 +1,383 @@
+
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
+import { useEntriesContext } from '../App';
+import { ImageUploader } from '../components/ImageUploader';
+import { LoadingSpinner, Toast, QuillIcon } from '../components/ui';
+import { EntryUpdatePayload } from '../types';
+import { API_BASE_URL } from '../config';
+import { resizeImage } from '../utils/image';
+
+const MAX_TOTAL_IMAGES = 5;
+
+const CreatePage = () => {
+  const { slug: editSlug } = useParams<{ slug: string }>();
+  const isEditMode = !!editSlug;
+
+  const { addEntry, getEntryBySlug, updateEntry, getCreatedEntries } = useEntriesContext();
+  const navigate = useNavigate();
+
+  const [bookTitle, setBookTitle] = useState('');
+  const [tagline, setTagline] = useState('');
+  const [reflection, setReflection] = useState('');
+  
+  const [bookCoverFile, setBookCoverFile] = useState<File | null>(null);
+  const [bookCoverPreview, setBookCoverPreview] = useState<string | null>(null);
+  const [existingBookCover, setExistingBookCover] = useState<string | null>(null);
+  const [isProcessingCover, setIsProcessingCover] = useState(false);
+  
+  const [stagedFiles, setStagedFiles] = useState<File[]>([]);
+  const [existingImages, setExistingImages] = useState<string[]>([]);
+  const [editKey, setEditKey] = useState<string | null>(null);
+  
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [showToast, setShowToast] = useState(false);
+  const [isRewriting, setIsRewriting] = useState(false);
+  const [rewriteError, setRewriteError] = useState('');
+
+  const maxNewImages = MAX_TOTAL_IMAGES - existingImages.length;
+
+  useEffect(() => {
+    if (isEditMode && editSlug) {
+      setIsLoading(true);
+      const loadEntryForEdit = async () => {
+        const entry = await getEntryBySlug(editSlug);
+        const created = getCreatedEntries();
+        const ownerInfo = created.find(m => m.slug === editSlug);
+
+        if (entry && ownerInfo) {
+          setBookTitle(entry.bookTitle);
+          setTagline(entry.tagline);
+          setReflection(entry.reflection);
+          setExistingImages(entry.images);
+          setEditKey(ownerInfo.editKey);
+          const currentCover = entry.bookCover || null;
+          setExistingBookCover(currentCover);
+          setBookCoverPreview(currentCover);
+        } else {
+          setError("You don't have permission to edit this entry or it doesn't exist.");
+          setTimeout(() => navigate('/list'), 2000);
+        }
+        setIsLoading(false);
+      };
+      loadEntryForEdit();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isEditMode, editSlug, navigate]);
+  
+  // Effect to handle cleanup of blob URLs to prevent memory leaks.
+  useEffect(() => {
+    let currentPreview = bookCoverPreview;
+    return () => {
+      if (currentPreview && currentPreview.startsWith('blob:')) {
+        URL.revokeObjectURL(currentPreview);
+      }
+    };
+  }, [bookCoverPreview]);
+
+
+  const uploadFiles = async (files: File[]): Promise<string[]> => {
+    if (files.length === 0) return [];
+    
+    const uploadPromises = files.map(async (file) => {
+        const presignResponse = await fetch(`${API_BASE_URL}/api/upload-url`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ filename: file.name, contentType: file.type }),
+        });
+
+        if (!presignResponse.ok) {
+            const errorData = await presignResponse.json().catch(() => ({}));
+            throw new Error(errorData.error || `Failed to get upload URL for ${file.name}`);
+        }
+        const { uploadUrl, publicUrl } = await presignResponse.json();
+
+        const uploadResponse = await fetch(uploadUrl, {
+            method: 'PUT',
+            body: file,
+            headers: { 'Content-Type': file.type },
+        });
+
+        if (!uploadResponse.ok) {
+            throw new Error(`Upload failed for ${file.name}.`);
+        }
+
+        return publicUrl;
+    });
+
+    return Promise.all(uploadPromises);
+  };
+
+  const handleBookCoverChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsProcessingCover(true);
+    setError('');
+
+    try {
+      const resizedFile = await resizeImage(file, 512);
+      setBookCoverFile(resizedFile);
+      setBookCoverPreview(URL.createObjectURL(resizedFile));
+
+    } catch (err) {
+      console.error("Failed to resize book cover:", err);
+      const message = err instanceof Error ? err.message : 'An unknown error occurred.';
+      setError(`Could not process cover image: ${message}`);
+    } finally {
+      setIsProcessingCover(false);
+      e.target.value = '';
+    }
+  };
+
+  const handleRemoveBookCover = () => {
+    setBookCoverFile(null);
+    setBookCoverPreview(null);
+  };
+
+  const handleRewrite = async () => {
+    if (!reflection.trim()) {
+        setRewriteError('Please write a reflection first before using AI assist.');
+        return;
+    }
+    setIsRewriting(true);
+    setRewriteError('');
+    setError('');
+
+    try {
+        const response = await fetch(`/api/rewrite-reflection`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text: reflection }),
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.error || 'The AI assistant failed to respond. Please try again later.');
+        }
+
+        const { rewrittenText } = await response.json();
+        setReflection(rewrittenText);
+
+    } catch (err) {
+        console.error("AI rewrite failed:", err);
+        const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
+        setRewriteError(errorMessage);
+    } finally {
+        setIsRewriting(false);
+    }
+  };
+  
+  const handleRemoveExistingImage = (urlToRemove: string) => {
+    setExistingImages(current => current.filter(url => url !== urlToRemove));
+  };
+
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    if (!bookTitle.trim()) {
+      setError("Book Title is required.");
+      return;
+    }
+
+    setIsLoading(true);
+
+    try {
+      if (isEditMode) {
+        // --- EDIT MODE ---
+        if (!editSlug || !editKey) {
+          setError('Could not update entry. Key information is missing.');
+          setIsLoading(false);
+          return;
+        }
+
+        const newImageUrls = await uploadFiles(stagedFiles);
+        let finalCoverUrl: string | null | undefined = undefined; // 'undefined' means no change
+        
+        if (bookCoverFile) { // A new file was selected and processed
+            const [uploadedUrl] = await uploadFiles([bookCoverFile]);
+            finalCoverUrl = uploadedUrl;
+        } else if (existingBookCover && !bookCoverPreview) { // An existing cover was present, but now there's no preview (it was removed).
+            finalCoverUrl = null; // 'null' means remove
+        }
+
+        const finalImageUrls = [...existingImages, ...newImageUrls];
+        const updatedData: EntryUpdatePayload = {
+          bookTitle,
+          tagline,
+          reflection,
+          images: finalImageUrls,
+          bookCover: finalCoverUrl,
+        };
+        const result = await updateEntry(editSlug, editKey, updatedData);
+        if (result.success) {
+          setShowToast(true);
+          setTimeout(() => navigate(`/memory/${editSlug}`), 2000);
+        } else {
+          setError(result.error || 'An unknown error occurred during update.');
+          setIsLoading(false);
+        }
+      } else {
+        // --- CREATE MODE ---
+        let uploadedCoverUrl: string | null = null;
+        if (bookCoverFile) {
+            [uploadedCoverUrl] = await uploadFiles([bookCoverFile]);
+        }
+        const uploadedImageUrls = await uploadFiles(stagedFiles);
+        
+        const result = await addEntry({
+          bookTitle,
+          tagline,
+          reflection,
+          images: uploadedImageUrls,
+          bookCover: uploadedCoverUrl,
+        });
+
+        if (!result.success || !result.slug) {
+          setError(result.error || 'Failed to create entry. The code might be taken.');
+          setIsLoading(false);
+          return;
+        }
+
+        setShowToast(true);
+        setTimeout(() => navigate(`/memory/${result.slug}`), 2000);
+      }
+    } catch (uploadError) {
+      console.error("Upload or submission process failed:", uploadError);
+      setError(uploadError instanceof Error ? uploadError.message : "A critical error occurred during file upload or submission.");
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-cream pt-24 pb-12">
+      <Toast message={isEditMode ? 'Entry updated!' : `${bookTitle} reflection is saved!`} show={showToast} onDismiss={() => setShowToast(false)} />
+      <div className="container mx-auto max-w-2xl px-4">
+        <div className="bg-white/80 backdrop-blur-md p-8 rounded-2xl shadow-xl">
+          <h1 className="text-3xl font-bold font-serif text-center text-ink">{isEditMode ? 'Edit Entry' : 'Create a New Entry'}</h1>
+          <p className="text-center text-slate-600 mt-2">{isEditMode ? 'Update the details for this reflection.' : 'Fill in the details for your new reflection.'}</p>
+
+          {isLoading && !showToast ? (
+            <div className="py-20 flex justify-center">
+              <LoadingSpinner />
+            </div>
+          ) : (
+            <form onSubmit={handleSubmit} className="mt-8 space-y-6">
+              <div>
+                <label htmlFor="bookTitle" className="block text-sm font-medium text-slate-600 font-serif">Book Title *</label>
+                <input type="text" id="bookTitle" value={bookTitle} onChange={e => setBookTitle(e.target.value)} className="mt-1 block w-full px-4 py-2 border border-slate-300 rounded-md shadow-sm focus:ring-teal-500 focus:border-teal-500" required />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-600 font-serif">Book Cover (Optional)</label>
+                <div className="mt-2 flex items-center gap-4">
+                    <span className="relative inline-block h-20 w-20 rounded-full overflow-hidden bg-slate-100 ring-2 ring-white">
+                        {bookCoverPreview ? (
+                            <img src={bookCoverPreview} alt="Book cover preview" className="h-full w-full object-cover" />
+                        ) : (
+                            <svg className="h-full w-full text-slate-300" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M24 20.993V24H0v-2.997A14.977 14.977 0 0112.004 15c4.904 0 9.26 2.354 11.996 5.993zM16.002 8.999a4 4 0 11-8 0 4 4 0 018 0z" />
+                            </svg>
+                        )}
+                         {isProcessingCover && (
+                            <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
+                                <div className="w-6 h-6 border-4 border-dashed border-white rounded-full animate-spin"></div>
+                            </div>
+                        )}
+                    </span>
+                    <input type="file" id="cover-upload" accept="image/*" onChange={handleBookCoverChange} className="hidden" disabled={isProcessingCover || isLoading} />
+                    <label htmlFor="cover-upload" className={`cursor-pointer rounded-md bg-white py-2 px-3 text-sm font-semibold text-ink shadow-sm ring-1 ring-inset ring-slate-300 hover:bg-slate-50 ${isProcessingCover || isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                        {isProcessingCover ? 'Processing...' : 'Change'}
+                    </label>
+                    {bookCoverPreview && !isProcessingCover && (
+                        <button type="button" onClick={handleRemoveBookCover} className="text-sm font-semibold text-red-600 hover:text-red-800" disabled={isLoading}>
+                            Remove
+                        </button>
+                    )}
+                </div>
+              </div>
+              
+              <div>
+                <label htmlFor="tagline" className="block text-sm font-medium text-slate-600 font-serif">One-line Summary (e.g., "A mind-bending sci-fi adventure")</label>
+                <input type="text" id="tagline" value={tagline} onChange={e => setTagline(e.target.value)} className="mt-1 block w-full px-4 py-2 border border-slate-300 rounded-md shadow-sm focus:ring-teal-500 focus:border-teal-500" />
+              </div>
+              <div>
+                <div className="flex justify-between items-center">
+                  <label htmlFor="reflection" className="block text-sm font-medium text-slate-600 font-serif">My Reflection & Thoughts</label>
+                  <button 
+                    type="button" 
+                    onClick={handleRewrite}
+                    disabled={isRewriting || !reflection.trim()}
+                    className="flex items-center gap-1.5 text-sm text-teal-600 hover:text-teal-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium px-2 py-1 rounded-md hover:bg-teal-50"
+                    aria-label="Rewrite with AI"
+                  >
+                    <QuillIcon className={`w-4 h-4 ${isRewriting ? 'animate-spin' : ''}`} />
+                    <span>{isRewriting ? 'Thinking...' : 'AI Assist'}</span>
+                  </button>
+                </div>
+                <textarea 
+                  id="reflection" 
+                  value={reflection} 
+                  onChange={e => { setReflection(e.target.value); setRewriteError(''); }} 
+                  rows={6} 
+                  className="mt-1 block w-full px-4 py-2 border border-slate-300 rounded-md shadow-sm focus:ring-teal-500 focus:border-teal-500" 
+                  placeholder="What did this book make you feel? What ideas did it spark? Jot down your unfiltered thoughts..."></textarea>
+                {rewriteError && <p className="text-red-500 text-xs mt-1">{rewriteError}</p>}
+              </div>
+
+              {isEditMode && existingImages.length > 0 && (
+                <div>
+                    <label className="block text-sm font-medium text-slate-600 font-serif">Current Inspirational Images (click to remove)</label>
+                    <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-4 mt-2 p-2 border border-slate-200 rounded-md">
+                        {existingImages.map((imgUrl) => (
+                            <div key={imgUrl} className="relative group aspect-square">
+                                <img src={imgUrl} alt={`Existing inspirational photo`} className="h-full w-full object-cover rounded-md shadow-sm" />
+                                <button 
+                                    type="button" 
+                                    onClick={() => handleRemoveExistingImage(imgUrl)}
+                                    className="absolute inset-0 w-full h-full bg-black/50 flex items-center justify-center text-white text-3xl opacity-0 group-hover:opacity-100 transition-opacity rounded-md cursor-pointer"
+                                    aria-label="Remove image"
+                                >
+                                    &#x2715;
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+              )}
+              
+              {maxNewImages > 0 ? (
+                <ImageUploader
+                  onFilesChange={setStagedFiles}
+                  isSubmitting={isLoading}
+                  maxImages={maxNewImages}
+                />
+              ) : (
+                <div>
+                  <label className="block text-sm font-medium text-slate-600 font-serif">Inspirational Images</label>
+                  <div className="mt-1 bg-slate-100 p-4 rounded-md text-sm text-slate-600 text-center">
+                    You have reached the maximum of {MAX_TOTAL_IMAGES} photos. Remove an existing photo to add a new one.
+                  </div>
+                </div>
+              )}
+              
+              <div className="bg-blue-100 p-3 rounded-lg text-sm text-blue-800">
+                <p><strong>Important:</strong> Your entry code will be auto-generated. This entry can only be permanently deleted or edited from <strong>this device</strong>. Please keep the code safe to share with others.</p>
+              </div>
+              
+              {error && <p className="text-red-500 text-center">{error}</p>}
+              
+              <button type="submit" className="w-full bg-teal-500 text-white font-bold py-3 px-4 rounded-lg hover:bg-teal-600 transition-colors duration-300 disabled:bg-slate-400" disabled={isLoading || isProcessingCover}>
+                {isLoading ? 'Submitting...' : (isEditMode ? 'Update Entry' : 'Create Entry')}
+              </button>
+            </form>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default CreatePage;

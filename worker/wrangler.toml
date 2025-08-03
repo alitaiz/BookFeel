@@ -1,0 +1,38 @@
+# This file contains the configuration for your Cloudflare Worker.
+# When deploying, you should rename this file from "wrangler.toml.txt" to "wrangler.toml".
+
+# The name of your worker. This should match the name in your Cloudflare dashboard
+# and the subdomain of your worker's URL (e.g., "book-api" for book-api.beetle142.workers.dev).
+name = "book-api"
+
+# The entrypoint for your worker script.
+main = "src/index.ts"
+
+# The compatibility date ensures that your worker runs with a specific version of the Workers runtime.
+# It's important for stability. You can find the latest date in the Cloudflare documentation.
+compatibility_date = "2023-12-18"
+
+# This section is for non-secret environment variables that your worker can access.
+# Secrets (like API keys) should be managed separately with `wrangler secret put`.
+[vars]
+R2_BUCKET_NAME = "book-assets"
+
+# This section binds a KV (Key-Value) Namespace to your worker.
+# 'binding' is the variable name you'll use to access the KV in your worker code (e.g., env.BOOKFEEL_KV).
+# 'id' is the unique ID of the KV namespace you created in your Cloudflare dashboard.
+[[kv_namespaces]]
+binding = "BOOKFEEL_KV"
+id = "4704511fbedd4574bf6172a0229d10a7"
+# For local development with `wrangler dev`, you should create a separate preview namespace
+# and add its ID here, for example:
+# preview_id = "your_preview_namespace_id_here"
+
+# This section binds an R2 Bucket to your worker.
+# 'binding' is the variable name you'll use to access the bucket in your code (e.g., env.BOOK_ASSETS_BUCKET).
+# 'bucket_name' is the name of the R2 bucket you created in the Cloudflare dashboard.
+[[r2_buckets]]
+binding = "BOOK_ASSETS_BUCKET"
+bucket_name = "book-assets"
+# For local development with `wrangler dev`, you might want to use a separate preview bucket,
+# for example:
+# preview_bucket_name = "preview-book-assets"
