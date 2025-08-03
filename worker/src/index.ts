@@ -1,4 +1,3 @@
-
 // To address TypeScript errors when @cloudflare/workers-types is not available,
 // we'll provide minimal type definitions for the Cloudflare environment.
 // In a real-world project, you should `npm install -D @cloudflare/workers-types`
@@ -42,32 +41,23 @@ interface BookEntry {
   bookCover?: string;
   tagline: string;
   reflection: string;
-  images: string[]; // Array of public image URLs
   createdAt: string;
   editKey: string; // The secret key
 }
 
 /**
- * Generates a numeric string with a random length between 5 and 8.
- * Each digit (0-9) will appear at most twice in the generated string.
+ * Generates a random alphanumeric string of a given length.
+ * @param length The desired length of the string. Defaults to 12.
  */
-const generateNumericSlug = (): string => {
-  const digits = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
-  // Create a pool where each digit appears twice
-  let pool = [...digits, ...digits];
-
-  // Shuffle the pool using Fisher-Yates algorithm
-  for (let i = pool.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [pool[i], pool[j]] = [pool[j], pool[i]];
+const generateAlphanumericSlug = (length: number = 12): string => {
+  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+  let result = '';
+  for (let i = 0; i < length; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length));
   }
-
-  // Determine a random length between 5 and 8
-  const length = Math.floor(Math.random() * 4) + 5; // Result is 5, 6, 7, or 8
-
-  // Take the first 'length' characters from the shuffled pool and join them
-  return pool.slice(0, length).join('');
+  return result;
 };
+
 
 /**
  * Generates a unique slug by checking for its existence in KV.
@@ -80,7 +70,7 @@ async function getUniqueSlug(kv: KVNamespace): Promise<string> {
   const maxAttempts = 20; // Safety break to prevent infinite loops
 
   while (attempts < maxAttempts) {
-    slug = generateNumericSlug();
+    slug = generateAlphanumericSlug();
     const existing = await kv.get(slug);
     if (existing === null) {
       return slug; // Found a unique slug
@@ -91,7 +81,7 @@ async function getUniqueSlug(kv: KVNamespace): Promise<string> {
   // If we couldn't find a unique slug after several attempts, add more entropy.
   // This is a fallback for a highly saturated namespace.
   console.warn(`Could not generate unique slug in ${maxAttempts} attempts. Adding suffix.`);
-  return `${generateNumericSlug()}-${Math.random().toString(36).substring(2, 6)}`;
+  return `${generateAlphanumericSlug()}-${Math.random().toString(36).substring(2, 6)}`;
 }
 
 const corsHeaders = {
@@ -169,7 +159,9 @@ export default {
                     return {
                         slug: entry.slug,
                         bookTitle: entry.bookTitle,
-                        createdAt: entry.createdAt
+                        createdAt: entry.createdAt,
+                        tagline: entry.tagline,
+                        bookCover: entry.bookCover,
                     };
                 });
 
@@ -248,44 +240,20 @@ export default {
               
               const updateData: Partial<BookEntry> & { bookCover?: string | null } = await request.json();
 
-              // --- Consolidate Deletion Logic ---
-              const urlsToDelete = [];
-              // Check bookCover
+              // If a new book cover is being uploaded, the old one must be deleted.
               if (updateData.bookCover !== undefined && storedEntry.bookCover && updateData.bookCover !== storedEntry.bookCover) {
-                  urlsToDelete.push(storedEntry.bookCover);
-              }
-              // Check gallery images
-              const originalImageUrls = storedEntry.images || [];
-              const newImageUrls = new Set(updateData.images || []);
-              originalImageUrls.forEach(url => {
-                  if (!newImageUrls.has(url)) {
-                      urlsToDelete.push(url);
-                  }
-              });
-              
-              if (urlsToDelete.length > 0) {
                   const s3 = getR2Client(env);
-                  const objectKeys = urlsToDelete.map(imageUrl => {
-                      try {
-                          const key = new URL(imageUrl).pathname.substring(1);
-                          if (key) return { Key: key };
-                          return null;
-                      } catch (e) {
-                          console.error(`[Update] Invalid URL encountered during diff for slug ${slug}: ${imageUrl}`, e);
-                          return null;
+                  try {
+                      const key = new URL(storedEntry.bookCover).pathname.substring(1);
+                      if (key) {
+                           await s3.send(new DeleteObjectsCommand({
+                              Bucket: env.R2_BUCKET_NAME,
+                              Delete: { Objects: [{ Key: key }] },
+                           }));
                       }
-                  }).filter((obj): obj is { Key: string } => obj !== null && obj.Key !== '');
-
-                  if (objectKeys.length > 0) {
-                      const deleteResult: DeleteObjectsCommandOutput = await s3.send(new DeleteObjectsCommand({
-                          Bucket: env.R2_BUCKET_NAME,
-                          Delete: { Objects: objectKeys },
-                      }));
-                      if (deleteResult.Errors && deleteResult.Errors.length > 0) {
-                          console.error(`[Update] Errors deleting objects from R2 for slug ${slug}:`, deleteResult.Errors);
-                          const errorMessages = deleteResult.Errors.map(e => `${e.Key}: ${e.Message}`).join(', ');
-                          throw new Error(`Failed to remove old images from storage: ${errorMessages}`);
-                      }
+                  } catch (e) {
+                      console.error(`[Update] Failed to parse or delete old book cover ${storedEntry.bookCover} for slug ${slug}:`, e);
+                      // Non-fatal, continue with update
                   }
               }
 
@@ -294,7 +262,6 @@ export default {
                   bookTitle: updateData.bookTitle ?? storedEntry.bookTitle,
                   tagline: updateData.tagline ?? storedEntry.tagline,
                   reflection: updateData.reflection ?? storedEntry.reflection,
-                  images: updateData.images ?? storedEntry.images,
                   bookCover: updateData.bookCover === null ? undefined : (updateData.bookCover ?? storedEntry.bookCover),
               };
 
@@ -335,30 +302,23 @@ export default {
             return new Response(JSON.stringify({ error: 'Forbidden. Invalid edit key.' }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
           }
           
-          const urlsToDelete = [...(entry.images || [])];
           if (entry.bookCover) {
-              urlsToDelete.push(entry.bookCover);
-          }
-          
-          if (urlsToDelete.length > 0) {
-            const s3 = getR2Client(env);
-            const objectKeys = urlsToDelete.map(imageUrl => {
-                try {
-                  return { Key: new URL(imageUrl).pathname.substring(1) };
-                } catch { return null; }
-            }).filter((obj): obj is { Key: string } => obj !== null && obj.Key !== '');
-            
-            if (objectKeys.length > 0) {
-               const deleteResult: DeleteObjectsCommandOutput = await s3.send(new DeleteObjectsCommand({
-                Bucket: env.R2_BUCKET_NAME,
-                Delete: { Objects: objectKeys },
-              }));
-              if (deleteResult.Errors && deleteResult.Errors.length > 0) {
-                  console.error(`[Delete] Errors deleting objects from R2 for slug ${slug}:`, deleteResult.Errors);
-                  const errorMessages = deleteResult.Errors.map(e => `${e.Key}: ${e.Message}`).join(', ');
-                  throw new Error(`Failed to delete images from storage: ${errorMessages}`);
+              const s3 = getR2Client(env);
+              try {
+                  const key = new URL(entry.bookCover).pathname.substring(1);
+                   if (key) {
+                       const deleteResult: DeleteObjectsCommandOutput = await s3.send(new DeleteObjectsCommand({
+                        Bucket: env.R2_BUCKET_NAME,
+                        Delete: { Objects: [{ Key: key }] },
+                      }));
+                      if (deleteResult.Errors && deleteResult.Errors.length > 0) {
+                          console.error(`[Delete] Errors deleting book cover from R2 for slug ${slug}:`, deleteResult.Errors);
+                      }
+                   }
+              } catch (e) {
+                  console.error(`[Delete] Failed to parse or delete book cover ${entry.bookCover} for slug ${slug}:`, e);
+                  // Non-fatal, proceed with KV deletion.
               }
-            }
           }
           
           await env.BOOKFEEL_KV.delete(slug);

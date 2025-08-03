@@ -13,7 +13,7 @@ import { BookOpenIcon } from './components/ui';
 
 interface EntriesContextType {
   loading: boolean;
-  addEntry: (entryData: { bookTitle: string; tagline: string; reflection: string; images: string[]; bookCover?: string | null; }) => Promise<{ success: boolean; error?: string; slug?: string; editKey?: string; }>;
+  addEntry: (entryData: { bookTitle: string; tagline: string; reflection: string; bookCover?: string | null; }) => Promise<{ success: boolean; error?: string; slug?: string; editKey?: string; }>;
   getEntryBySlug: (slug: string) => Promise<Omit<BookEntry, 'editKey'> | undefined>;
   getEntrySummaries: (slugs: string[]) => Promise<EntrySummary[]>;
   deleteEntry: (slug: string, editKey: string) => Promise<{ success: boolean; error?: string }>;

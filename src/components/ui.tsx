@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { EntrySummary } from '../types';
@@ -43,16 +42,20 @@ interface EntryCardProps {
 
 export const EntryCard = ({ entry, onDelete, isOwner }: EntryCardProps) => (
   <div className="bg-white/70 backdrop-blur-sm p-4 rounded-xl shadow-md flex items-center justify-between transition-transform duration-300 hover:scale-105 hover:shadow-lg">
-    <div className="flex items-center space-x-4">
-      <div className={`rounded-full p-2 ${isOwner ? 'bg-teal-100' : 'bg-gray-100'}`}>
-        <BookOpenIcon className={`w-6 h-6 ${isOwner ? 'text-teal-600' : 'text-slate-400'}`} />
-      </div>
-      <div>
-        <p className="font-serif font-bold text-ink">{entry.bookTitle}</p>
-        <p className="text-sm text-slate-500">Code: {entry.slug}</p>
+    <div className="flex items-center space-x-4 flex-grow min-w-0">
+      {entry.bookCover ? (
+        <img src={entry.bookCover} alt={`${entry.bookTitle} cover`} className="w-12 h-16 rounded-md object-cover bg-slate-100 flex-shrink-0" />
+      ) : (
+        <div className={`w-12 h-16 rounded-md flex-shrink-0 flex items-center justify-center ${isOwner ? 'bg-teal-100' : 'bg-gray-100'}`}>
+            <BookOpenIcon className={`w-6 h-6 ${isOwner ? 'text-teal-600' : 'text-slate-400'}`} />
+        </div>
+      )}
+      <div className="flex-grow min-w-0">
+        <p className="font-serif font-bold text-ink truncate">{entry.bookTitle}</p>
+        <p className="text-sm text-slate-500 truncate">{entry.tagline || 'No one-line summary provided.'}</p>
       </div>
     </div>
-    <div className="flex items-center space-x-2">
+    <div className="flex items-center space-x-2 flex-shrink-0 ml-4">
       <Link to={`/memory/${entry.slug}`} className="bg-blue-400 text-white px-3 py-1 rounded-full text-sm font-semibold hover:bg-blue-500 transition-colors">
         Visit
       </Link>

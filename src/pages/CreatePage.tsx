@@ -1,14 +1,10 @@
-
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useEntriesContext } from '../App';
-import { ImageUploader } from '../components/ImageUploader';
 import { LoadingSpinner, Toast, QuillIcon } from '../components/ui';
 import { EntryUpdatePayload } from '../types';
 import { API_BASE_URL } from '../config';
 import { resizeImage } from '../utils/image';
-
-const MAX_TOTAL_IMAGES = 5;
 
 const CreatePage = () => {
   const { slug: editSlug } = useParams<{ slug: string }>();
@@ -26,8 +22,6 @@ const CreatePage = () => {
   const [existingBookCover, setExistingBookCover] = useState<string | null>(null);
   const [isProcessingCover, setIsProcessingCover] = useState(false);
   
-  const [stagedFiles, setStagedFiles] = useState<File[]>([]);
-  const [existingImages, setExistingImages] = useState<string[]>([]);
   const [editKey, setEditKey] = useState<string | null>(null);
   
   const [isLoading, setIsLoading] = useState(false);
@@ -35,8 +29,6 @@ const CreatePage = () => {
   const [showToast, setShowToast] = useState(false);
   const [isRewriting, setIsRewriting] = useState(false);
   const [rewriteError, setRewriteError] = useState('');
-
-  const maxNewImages = MAX_TOTAL_IMAGES - existingImages.length;
 
   useEffect(() => {
     if (isEditMode && editSlug) {
@@ -50,7 +42,6 @@ const CreatePage = () => {
           setBookTitle(entry.bookTitle);
           setTagline(entry.tagline);
           setReflection(entry.reflection);
-          setExistingImages(entry.images);
           setEditKey(ownerInfo.editKey);
           const currentCover = entry.bookCover || null;
           setExistingBookCover(currentCover);
@@ -168,11 +159,6 @@ const CreatePage = () => {
         setIsRewriting(false);
     }
   };
-  
-  const handleRemoveExistingImage = (urlToRemove: string) => {
-    setExistingImages(current => current.filter(url => url !== urlToRemove));
-  };
-
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -193,7 +179,6 @@ const CreatePage = () => {
           return;
         }
 
-        const newImageUrls = await uploadFiles(stagedFiles);
         let finalCoverUrl: string | null | undefined = undefined; // 'undefined' means no change
         
         if (bookCoverFile) { // A new file was selected and processed
@@ -203,12 +188,10 @@ const CreatePage = () => {
             finalCoverUrl = null; // 'null' means remove
         }
 
-        const finalImageUrls = [...existingImages, ...newImageUrls];
         const updatedData: EntryUpdatePayload = {
           bookTitle,
           tagline,
           reflection,
-          images: finalImageUrls,
           bookCover: finalCoverUrl,
         };
         const result = await updateEntry(editSlug, editKey, updatedData);
@@ -225,13 +208,11 @@ const CreatePage = () => {
         if (bookCoverFile) {
             [uploadedCoverUrl] = await uploadFiles([bookCoverFile]);
         }
-        const uploadedImageUrls = await uploadFiles(stagedFiles);
         
         const result = await addEntry({
           bookTitle,
           tagline,
           reflection,
-          images: uploadedImageUrls,
           bookCover: uploadedCoverUrl,
         });
 
@@ -321,50 +302,14 @@ const CreatePage = () => {
                   id="reflection" 
                   value={reflection} 
                   onChange={e => { setReflection(e.target.value); setRewriteError(''); }} 
-                  rows={6} 
+                  rows={10} 
                   className="mt-1 block w-full px-4 py-2 border border-slate-300 rounded-md shadow-sm focus:ring-teal-500 focus:border-teal-500" 
                   placeholder="What did this book make you feel? What ideas did it spark? Jot down your unfiltered thoughts..."></textarea>
                 {rewriteError && <p className="text-red-500 text-xs mt-1">{rewriteError}</p>}
               </div>
-
-              {isEditMode && existingImages.length > 0 && (
-                <div>
-                    <label className="block text-sm font-medium text-slate-600 font-serif">Current Inspirational Images (click to remove)</label>
-                    <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-4 mt-2 p-2 border border-slate-200 rounded-md">
-                        {existingImages.map((imgUrl) => (
-                            <div key={imgUrl} className="relative group aspect-square">
-                                <img src={imgUrl} alt={`Existing inspirational photo`} className="h-full w-full object-cover rounded-md shadow-sm" />
-                                <button 
-                                    type="button" 
-                                    onClick={() => handleRemoveExistingImage(imgUrl)}
-                                    className="absolute inset-0 w-full h-full bg-black/50 flex items-center justify-center text-white text-3xl opacity-0 group-hover:opacity-100 transition-opacity rounded-md cursor-pointer"
-                                    aria-label="Remove image"
-                                >
-                                    &#x2715;
-                                </button>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-              )}
-              
-              {maxNewImages > 0 ? (
-                <ImageUploader
-                  onFilesChange={setStagedFiles}
-                  isSubmitting={isLoading}
-                  maxImages={maxNewImages}
-                />
-              ) : (
-                <div>
-                  <label className="block text-sm font-medium text-slate-600 font-serif">Inspirational Images</label>
-                  <div className="mt-1 bg-slate-100 p-4 rounded-md text-sm text-slate-600 text-center">
-                    You have reached the maximum of {MAX_TOTAL_IMAGES} photos. Remove an existing photo to add a new one.
-                  </div>
-                </div>
-              )}
               
               <div className="bg-blue-100 p-3 rounded-lg text-sm text-blue-800">
-                <p><strong>Important:</strong> Your entry code will be auto-generated. This entry can only be permanently deleted or edited from <strong>this device</strong>. Please keep the code safe to share with others.</p>
+                <p><strong>Important:</strong> Your entry code will be auto-generated. This entry can only be permanently deleted or edited from <strong>this device</strong>. The entry is shared via its URL, so be sure to save the link after creation.</p>
               </div>
               
               {error && <p className="text-red-500 text-center">{error}</p>}

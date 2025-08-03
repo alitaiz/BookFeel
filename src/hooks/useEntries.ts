@@ -1,4 +1,3 @@
-
 import { useState, useCallback } from 'react';
 import { BookEntry, CreatedEntryInfo, EntryUpdatePayload, EntrySummary } from '../types';
 import { API_BASE_URL } from '../config';
@@ -70,10 +69,10 @@ export const useEntries = () => {
 
 
   // --- API Functions ---
-  const addEntry = useCallback(async (entryData: { bookTitle: string; tagline: string; reflection: string; images: string[]; bookCover?: string | null; }): Promise<{ success: boolean; error?: string, slug?: string, editKey?: string }> => {
+  const addEntry = useCallback(async (entryData: { bookTitle: string; tagline: string; reflection: string; bookCover?: string | null; }): Promise<{ success: boolean; error?: string, slug?: string, editKey?: string }> => {
     setLoading(true);
     try {
-      const { bookTitle, tagline, reflection, images, bookCover } = entryData;
+      const { bookTitle, tagline, reflection, bookCover } = entryData;
       // Generate editKey on the client
       const editKey = generateUUID();
 
@@ -81,7 +80,6 @@ export const useEntries = () => {
         bookTitle,
         tagline,
         reflection,
-        images,
         editKey,
         bookCover,
         createdAt: new Date().toISOString(),

@@ -1,10 +1,8 @@
-
 import React, { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useEntriesContext } from '../App';
 import { BookEntry } from '../types';
-import { Carousel } from '../components/Carousel';
-import { BookOpenIcon } from '../components/ui';
+import { BookOpenIcon, Toast } from '../components/ui';
 
 const MemoryPage = () => {
   const { slug } = useParams<{ slug: string }>();
@@ -14,8 +12,8 @@ const MemoryPage = () => {
   const [error, setError] = useState('');
   const [isOwner, setIsOwner] = useState(false);
   const [recoverCode, setRecoverCode] = useState('');
-  const [fullscreenImage, setFullscreenImage] = useState<string | null>(null);
-  const [showOverlay, setShowOverlay] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
+  const [showToast, setShowToast] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -49,20 +47,6 @@ const MemoryPage = () => {
     fetchEntry();
     return () => { isMounted = false; };
   }, [slug, getEntryBySlug, navigate, getCreatedEntries, removeVisitedSlug]);
-
-  // Lightbox escape key handler
-  useEffect(() => {
-    if (fullscreenImage) {
-      const handleKeyDown = (e: KeyboardEvent) => {
-        if (e.key === 'Escape') {
-          closeFullscreen();
-        }
-      };
-      window.addEventListener('keydown', handleKeyDown);
-      return () => window.removeEventListener('keydown', handleKeyDown);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fullscreenImage]);
   
   const handleRecoverSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -73,18 +57,18 @@ const MemoryPage = () => {
         setRecoverCode('');
     }
   };
-  
-  const handleImageClick = (imageUrl: string) => {
-    setFullscreenImage(imageUrl);
-    // Use a microtask to ensure the element is rendered before we transition opacity
-    queueMicrotask(() => setShowOverlay(true));
-  };
 
-  const closeFullscreen = () => {
-    setShowOverlay(false);
-    setTimeout(() => {
-      setFullscreenImage(null);
-    }, 300); // Duration of the fade-out transition
+  const handleCopyLink = () => {
+    navigator.clipboard.writeText(window.location.href).then(() => {
+        setToastMessage('Link copied to clipboard!');
+        setShowToast(true);
+        setTimeout(() => setShowToast(false), 2500);
+    }, (err) => {
+        console.error('Could not copy text: ', err);
+        setToastMessage('Failed to copy link.');
+        setShowToast(true);
+        setTimeout(() => setShowToast(false), 2500);
+    });
   };
 
   if (loading && !entry) {
@@ -114,6 +98,7 @@ const MemoryPage = () => {
 
   return (
     <div className="min-h-screen bg-paper">
+      <Toast message={toastMessage} show={showToast} onDismiss={() => setShowToast(false)} />
       {/* Hero Section */}
       <div className="relative h-80 md:h-96 w-full flex items-center justify-center text-white text-center pb-16">
         <div className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: `url(${coverImage})` }}></div>
@@ -134,26 +119,22 @@ const MemoryPage = () => {
                 className="absolute left-1/2 -translate-x-1/2 -top-16 w-32 h-32 rounded-full object-cover border-8 border-white bg-white shadow-lg"
               />
             )}
-          <div className="text-center mb-8">
-            <p className="mt-2 text-sm text-slate-500 font-serif">Entry Code: <span className="font-bold text-ink">{entry.slug}</span></p>
-            <p className="mt-1 text-xs text-slate-400">Remember this code for easy access from any device.</p>
+          <div className="text-center mb-8 space-y-2">
+              <button onClick={handleCopyLink} className="bg-blue-100 text-blue-800 text-sm font-semibold py-2 px-4 rounded-full hover:bg-blue-200 transition-colors">
+                  🔗 Share by copying this page's link
+              </button>
             {isOwner && (
-              <Link to={`/edit/${entry.slug}`} className="mt-4 inline-block bg-gray-200 text-ink text-xs font-bold py-1 px-3 rounded-full hover:bg-gray-300 transition-colors">
-                  Edit Entry
-              </Link>
+              <div>
+                <Link to={`/edit/${entry.slug}`} className="text-xs text-slate-500 hover:text-slate-700 underline">
+                    Edit Entry
+                </Link>
+              </div>
             )}
           </div>
 
-          <div className="prose prose-lg max-w-none text-ink whitespace-pre-wrap font-sans text-center">
+          <div className="prose prose-lg max-w-none text-ink whitespace-pre-wrap font-sans text-justify">
             <p>{entry.reflection}</p>
           </div>
-
-          {entry.images && entry.images.length > 0 && (
-            <div className="mt-12">
-              <h3 className="text-2xl font-serif font-bold text-center text-ink mb-6">Inspirational Gallery</h3>
-              <Carousel images={entry.images} onImageClick={handleImageClick} />
-            </div>
-          )}
         </div>
       </div>
       
@@ -176,7 +157,7 @@ const MemoryPage = () => {
                             type="text"
                             value={recoverCode}
                             onChange={(e) => setRecoverCode(e.target.value)}
-                            placeholder="e.g., 1234567"
+                            placeholder="e.g., a1b2c3d4e5f6"
                             className="w-full px-4 py-2 border border-slate-300 rounded-full focus:ring-teal-500 focus:border-teal-500"
                             aria-label="Entry Code Input"
                         />
@@ -188,31 +169,6 @@ const MemoryPage = () => {
             </div>
         </div>
       </div>
-      
-      {/* Fullscreen Image Overlay */}
-      {fullscreenImage && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-label="Fullscreen image view"
-          className={`fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4 transition-opacity duration-300 ${showOverlay ? 'opacity-100' : 'opacity-0'}`}
-          onClick={closeFullscreen}
-        >
-          <img
-            src={fullscreenImage}
-            alt="Fullscreen view of inspirational image"
-            className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
-            onClick={(e) => e.stopPropagation()} // Prevent closing when clicking the image itself
-          />
-          <button
-            onClick={closeFullscreen}
-            className="absolute top-4 right-4 text-white text-5xl font-light hover:text-gray-300 transition-colors leading-none"
-            aria-label="Close fullscreen view"
-          >
-            &times;
-          </button>
-        </div>
-      )}
     </div>
   );
 };
