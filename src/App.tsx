@@ -1,4 +1,3 @@
-
 import React, { createContext, useContext } from 'react';
 import { BrowserRouter, Routes, Route, Link, Outlet, useLocation } from 'react-router-dom';
 import { useEntries } from './hooks/useEntries';
@@ -7,7 +6,6 @@ import StartPage from './pages/StartPage';
 import CreatePage from './pages/CreatePage';
 import MemoryPage from './pages/MemoryPage';
 import ListPage from './pages/ListPage';
-import RecoverPage from './pages/RecoverPage';
 import { BookOpenIcon } from './components/ui';
 
 
@@ -45,14 +43,20 @@ const EntriesProvider: React.FC<{ children: React.ReactNode }> = ({ children }) 
 const Header = () => {
     const location = useLocation();
     const isHomePage = location.pathname === '/';
+    const hideCreateButton = location.pathname.startsWith('/create') || location.pathname.startsWith('/edit');
 
     return (
         <header className={`fixed top-0 left-0 right-0 z-10 transition-all duration-300 ${isHomePage ? 'bg-transparent' : 'bg-white/50 backdrop-blur-sm shadow-sm'}`}>
-            <nav className="container mx-auto px-6 py-3 flex justify-center items-center">
+            <nav className="container mx-auto px-6 py-3 flex justify-between items-center">
                 <Link to="/" className="flex items-center space-x-3 text-ink group">
                     <BookOpenIcon className="w-6 h-6 text-teal-600 transition-transform duration-300 group-hover:scale-110" />
                     <span className="font-serif text-xl font-bold group-hover:text-teal-700 transition-colors">Bookfeel</span>
                 </Link>
+                {!hideCreateButton && (
+                    <Link to="/create" className="bg-teal-500 text-white font-bold py-2 px-4 rounded-full text-sm hover:bg-teal-600 transition-colors duration-300 transform hover:scale-105">
+                        + New Entry
+                    </Link>
+                )}
             </nav>
         </header>
     );
@@ -95,7 +99,6 @@ function App() {
             <Route path="edit/:slug" element={<CreatePage />} />
             <Route path="memory/:slug" element={<MemoryPage />} />
             <Route path="list" element={<ListPage />} />
-            <Route path="recover" element={<RecoverPage />} />
             <Route path="*" element={<NotFoundPage />} />
           </Route>
         </Routes>

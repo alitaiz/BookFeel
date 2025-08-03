@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { useEntriesContext } from '../App';
@@ -11,6 +10,7 @@ const ListPage = () => {
   const [createdEntries, setCreatedEntries] = useState<CreatedEntryInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
 
   const loadEntries = useCallback(async () => {
     setLoading(true);
@@ -58,6 +58,11 @@ const ListPage = () => {
     }
   };
 
+  const filteredEntries = entries.filter(entry =>
+    entry.bookTitle.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (entry.tagline && entry.tagline.toLowerCase().includes(searchQuery.toLowerCase()))
+  );
+
   return (
     <div className="min-h-screen bg-cream pt-24 pb-12">
       <div className="container mx-auto max-w-2xl px-4">
@@ -65,6 +70,17 @@ const ListPage = () => {
           <h1 className="text-3xl font-bold font-serif text-center text-ink">Your Book Reflections</h1>
           <p className="text-center text-slate-600 mt-2">A list of reflections you have created or visited.</p>
           
+          <div className="mt-6">
+            <input
+              type="text"
+              placeholder="Search by title or one-line summary..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full px-4 py-2 border border-slate-300 rounded-full shadow-sm focus:ring-teal-500 focus:border-teal-500"
+              aria-label="Search your entries"
+            />
+          </div>
+
           {error && <p className="text-red-500 text-center mt-4 p-2 bg-red-100 rounded-md">{error}</p>}
 
           {loading ? (
@@ -72,22 +88,18 @@ const ListPage = () => {
                 <BookOpenIcon className="animate-spin w-10 h-10 text-teal-500"/>
                 <p className="ml-4 font-serif text-slate-600">Loading your reflections...</p>
              </div>
-          ) : entries.length > 0 ? (
-            <div className="mt-8 space-y-4">
-              {entries.map(entry => {
+          ) : filteredEntries.length > 0 ? (
+            <div className="mt-4 space-y-4">
+              {filteredEntries.map(entry => {
                 const isOwner = createdEntries.some(cm => cm.slug === entry.slug);
                 return <EntryCard key={entry.slug} entry={entry} onDelete={handleDelete} isOwner={isOwner} />
               })}
             </div>
           ) : (
-            <p className="text-center mt-8 text-slate-500">You haven't created or visited any entries on this device yet.</p>
+            <p className="text-center mt-8 text-slate-500">
+              {searchQuery ? `No entries match "${searchQuery}".` : "You haven't created or visited any entries on this device yet."}
+            </p>
           )}
-
-          <div className="mt-8 text-center">
-            <Link to="/create" className="bg-teal-500 text-white font-bold py-3 px-6 rounded-full hover:bg-teal-600 transition-transform duration-300 inline-block transform hover:scale-105">
-              ➕ Create a New Entry
-            </Link>
-          </div>
         </div>
       </div>
     </div>

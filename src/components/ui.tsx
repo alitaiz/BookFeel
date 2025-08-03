@@ -53,6 +53,9 @@ export const EntryCard = ({ entry, onDelete, isOwner }: EntryCardProps) => (
       <div className="flex-grow min-w-0">
         <p className="font-serif font-bold text-ink truncate">{entry.bookTitle}</p>
         <p className="text-sm text-slate-500 truncate">{entry.tagline || 'No one-line summary provided.'}</p>
+        <p className="text-xs text-slate-400 mt-1">
+            {new Date(entry.createdAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
+        </p>
       </div>
     </div>
     <div className="flex items-center space-x-2 flex-shrink-0 ml-4">

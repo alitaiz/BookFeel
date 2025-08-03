@@ -307,11 +307,7 @@ const CreatePage = () => {
                   placeholder="What did this book make you feel? What ideas did it spark? Jot down your unfiltered thoughts..."></textarea>
                 {rewriteError && <p className="text-red-500 text-xs mt-1">{rewriteError}</p>}
               </div>
-              
-              <div className="bg-blue-100 p-3 rounded-lg text-sm text-blue-800">
-                <p><strong>Important:</strong> Your entry code will be auto-generated. This entry can only be permanently deleted or edited from <strong>this device</strong>. The entry is shared via its URL, so be sure to save the link after creation.</p>
-              </div>
-              
+                            
               {error && <p className="text-red-500 text-center">{error}</p>}
               
               <button type="submit" className="w-full bg-teal-500 text-white font-bold py-3 px-4 rounded-lg hover:bg-teal-600 transition-colors duration-300 disabled:bg-slate-400" disabled={isLoading || isProcessingCover}>
