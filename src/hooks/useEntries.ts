@@ -1,14 +1,32 @@
-import { useState, useCallback } from 'react';
-import { BookEntry, CreatedEntryInfo, EntryUpdatePayload, EntrySummary } from '../types';
+import { useState, useCallback, useEffect } from 'react';
+import { User, BookEntry, CreatedEntryInfo, EntryUpdatePayload, EntrySummary } from '../types';
 import { API_BASE_URL } from '../config';
 import { generateUUID } from '../utils/uuid';
 
+const LOCAL_USER_KEY = 'bookfeel_user';
 const LOCAL_CREATED_ENTRIES_KEY = 'bookfeel_created_entries';
-const LOCAL_VISITED_SLUGS_KEY = 'bookfeel_visited_slugs';
 
-// This hook manages interactions with the remote API and local storage for ownership/access
-export const useEntries = () => {
+interface FullUser extends User {
+  entries: CreatedEntryInfo[];
+}
+
+export const useApp = () => {
+  const [user, setUser] = useState<User | null>(null);
+  const [isLoadingUser, setIsLoadingUser] = useState<boolean>(true);
   const [loading, setLoading] = useState<boolean>(false);
+
+  useEffect(() => {
+    try {
+      const storedUser = localStorage.getItem(LOCAL_USER_KEY);
+      if (storedUser) {
+        setUser(JSON.parse(storedUser));
+      }
+    } catch (error) {
+      console.error("Failed to load user from local storage", error);
+    } finally {
+      setIsLoadingUser(false);
+    }
+  }, []);
 
   // --- Local storage management for OWNED entries ---
   const getCreatedEntries = useCallback((): CreatedEntryInfo[] => {
@@ -20,56 +38,82 @@ export const useEntries = () => {
     }
   }, []);
   
+  const syncCreatedEntries = useCallback((entries: CreatedEntryInfo[]) => {
+      localStorage.setItem(LOCAL_CREATED_ENTRIES_KEY, JSON.stringify(entries));
+  }, []);
+
   const addCreatedEntry = useCallback((slug: string, editKey: string) => {
     const created = getCreatedEntries();
     if (!created.some(m => m.slug === slug)) {
       const newCreated = [...created, { slug, editKey }];
-      localStorage.setItem(LOCAL_CREATED_ENTRIES_KEY, JSON.stringify(newCreated));
+      syncCreatedEntries(newCreated);
     }
-  }, [getCreatedEntries]);
+  }, [getCreatedEntries, syncCreatedEntries]);
   
   const removeCreatedEntry = useCallback((slug: string) => {
      const created = getCreatedEntries();
      const updated = created.filter(m => m.slug !== slug);
-     localStorage.setItem(LOCAL_CREATED_ENTRIES_KEY, JSON.stringify(updated));
-  }, [getCreatedEntries]);
-
-  // --- Local storage management for VISITED entries ---
-  const getVisitedSlugs = useCallback((): string[] => {
+     syncCreatedEntries(updated);
+  }, [getCreatedEntries, syncCreatedEntries]);
+  
+  // --- User Authentication ---
+  const login = useCallback(async (id: string): Promise<{ success: boolean, error?: string }> => {
+    setIsLoadingUser(true);
     try {
-      const stored = localStorage.getItem(LOCAL_VISITED_SLUGS_KEY);
-      return stored ? JSON.parse(stored) : [];
-    } catch {
-      return [];
+        const response = await fetch(`${API_BASE_URL}/api/users/${id.trim()}`);
+        if (response.ok) {
+            const fullUser: FullUser = await response.json();
+            const userData: User = { id: fullUser.id, name: fullUser.name };
+            localStorage.setItem(LOCAL_USER_KEY, JSON.stringify(userData));
+            syncCreatedEntries(fullUser.entries);
+            setUser(userData);
+            return { success: true };
+        } else {
+            const errorData = await response.json().catch(() => ({}));
+            return { success: false, error: errorData.error || `Login failed. Status: ${response.status}` };
+        }
+    } catch(error) {
+        console.error("API call to login failed:", error);
+        return { success: false, error: "Network error. Please check your connection and try again." };
+    } finally {
+        setIsLoadingUser(false);
+    }
+  }, [syncCreatedEntries]);
+
+  const logout = useCallback(() => {
+    localStorage.removeItem(LOCAL_USER_KEY);
+    localStorage.removeItem(LOCAL_CREATED_ENTRIES_KEY);
+    setUser(null);
+  }, []);
+
+  const createUser = useCallback(async (name: string): Promise<{ success: boolean; error?: string; user?: User }> => {
+    setLoading(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/users`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name }),
+      });
+
+      if (response.ok) {
+        const newUser: User = await response.json();
+        // Don't log in automatically, let the UI show the ID first
+        return { success: true, user: newUser };
+      } else {
+        const errorData = await response.json().catch(() => ({}));
+        return { success: false, error: errorData.error || 'Failed to create user.' };
+      }
+    } catch (error) {
+      console.error("API call to createUser failed:", error);
+      return { success: false, error: 'Network error. Could not create user.' };
+    } finally {
+      setLoading(false);
     }
   }, []);
 
-  const addVisitedSlug = useCallback((slug: string) => {
-    const created = getCreatedEntries();
-    if (created.some(m => m.slug === slug)) return; // Don't add if we own it
-
-    const visited = getVisitedSlugs();
-    if (!visited.includes(slug)) {
-      localStorage.setItem(LOCAL_VISITED_SLUGS_KEY, JSON.stringify([...visited, slug]));
-    }
-  }, [getCreatedEntries, getVisitedSlugs]);
-
-  const removeVisitedSlug = useCallback((slug: string) => {
-    const visited = getVisitedSlugs();
-    const updated = visited.filter(s => s !== slug);
-    localStorage.setItem(LOCAL_VISITED_SLUGS_KEY, JSON.stringify(updated));
-  }, [getVisitedSlugs]);
-
-  // --- Combined slugs ---
-  const getAllSlugs = useCallback((): string[] => {
-    const created = getCreatedEntries().map(m => m.slug);
-    const visited = getVisitedSlugs();
-    return [...new Set([...created, ...visited])]; // Unique slugs
-  }, [getCreatedEntries, getVisitedSlugs]);
-
-
-  // --- API Functions ---
+  // --- API Functions for entries ---
   const addEntry = useCallback(async (entryData: { bookTitle: string; tagline: string; reflection: string; bookCover?: string | null; }): Promise<{ success: boolean; error?: string, slug?: string, editKey?: string }> => {
+    if (!user) return { success: false, error: "User not authenticated." };
     setLoading(true);
     try {
       const { bookTitle, tagline, reflection, bookCover } = entryData;
@@ -87,7 +131,7 @@ export const useEntries = () => {
 
       const response = await fetch(`${API_BASE_URL}/api/entry`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-User-ID': user.id },
         body: JSON.stringify(payload),
       });
 
@@ -105,7 +149,7 @@ export const useEntries = () => {
     } finally {
       setLoading(false);
     }
-  }, [addCreatedEntry]);
+  }, [user, addCreatedEntry]);
   
   const getEntryBySlug = useCallback(async (slug: string): Promise<Omit<BookEntry, 'editKey'> | undefined> => {
     setLoading(true);
@@ -115,7 +159,6 @@ export const useEntries = () => {
         return undefined;
       }
       const data: Omit<BookEntry, 'editKey'> = await response.json();
-      addVisitedSlug(slug); // Add to visited list on successful fetch
       return data;
     } catch (error) {
       console.error("API call to getEntryBySlug failed:", error);
@@ -123,7 +166,7 @@ export const useEntries = () => {
     } finally {
       setLoading(false);
     }
-  }, [addVisitedSlug]);
+  }, []);
 
   const getEntrySummaries = useCallback(async (slugs: string[]): Promise<EntrySummary[]> => {
     if (slugs.length === 0) {
@@ -153,18 +196,19 @@ export const useEntries = () => {
   }, []);
 
   const deleteEntry = useCallback(async (slug: string, editKey: string): Promise<{ success: boolean; error?: string }> => {
+    if (!user) return { success: false, error: "User not authenticated." };
     setLoading(true);
     try {
       const response = await fetch(`${API_BASE_URL}/api/entry/${slug}`, {
         method: 'DELETE',
         headers: {
             'X-Edit-Key': editKey,
+            'X-User-ID': user.id
         }
       });
 
       if (response.ok) {
         removeCreatedEntry(slug);
-        removeVisitedSlug(slug); // Also remove from visited if it's there
         return { success: true };
       }
       const errorData = await response.json().catch(() => ({}));
@@ -175,9 +219,10 @@ export const useEntries = () => {
     } finally {
       setLoading(false);
     }
-  }, [removeCreatedEntry, removeVisitedSlug]);
+  }, [user, removeCreatedEntry]);
   
   const updateEntry = useCallback(async (slug: string, editKey: string, data: EntryUpdatePayload): Promise<{ success: boolean; error?: string }> => {
+    if (!user) return { success: false, error: "User not authenticated." };
     setLoading(true);
     try {
         const response = await fetch(`${API_BASE_URL}/api/entry/${slug}`, {
@@ -200,17 +245,20 @@ export const useEntries = () => {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [user]);
 
   return { 
+    user,
+    isLoadingUser,
+    login,
+    logout,
+    createUser,
     loading, 
     addEntry, 
     getEntryBySlug,
     getEntrySummaries,
     deleteEntry,
     updateEntry,
-    getAllSlugs,
     getCreatedEntries,
-    removeVisitedSlug,
   };
 };

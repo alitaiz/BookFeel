@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { useEntriesContext } from '../App';
+import { useAppContext } from '../App';
 import { LoadingSpinner, Toast, QuillIcon } from '../components/ui';
 import { EntryUpdatePayload } from '../types';
 import { API_BASE_URL } from '../config';
@@ -10,7 +10,7 @@ const CreatePage = () => {
   const { slug: editSlug } = useParams<{ slug: string }>();
   const isEditMode = !!editSlug;
 
-  const { addEntry, getEntryBySlug, updateEntry, getCreatedEntries } = useEntriesContext();
+  const { addEntry, getEntryBySlug, updateEntry, getCreatedEntries } = useAppContext();
   const navigate = useNavigate();
 
   const [bookTitle, setBookTitle] = useState('');
@@ -34,20 +34,27 @@ const CreatePage = () => {
     if (isEditMode && editSlug) {
       setIsLoading(true);
       const loadEntryForEdit = async () => {
-        const entry = await getEntryBySlug(editSlug);
+        // We check ownership on the client side for quick feedback.
+        // The backend will perform the definitive check using the editKey.
         const created = getCreatedEntries();
         const ownerInfo = created.find(m => m.slug === editSlug);
 
-        if (entry && ownerInfo) {
-          setBookTitle(entry.bookTitle);
-          setTagline(entry.tagline);
-          setReflection(entry.reflection);
-          setEditKey(ownerInfo.editKey);
-          const currentCover = entry.bookCover || null;
-          setExistingBookCover(currentCover);
-          setBookCoverPreview(currentCover);
+        if (ownerInfo) {
+          const entry = await getEntryBySlug(editSlug);
+          if (entry) {
+            setBookTitle(entry.bookTitle);
+            setTagline(entry.tagline);
+            setReflection(entry.reflection);
+            setEditKey(ownerInfo.editKey);
+            const currentCover = entry.bookCover || null;
+            setExistingBookCover(currentCover);
+            setBookCoverPreview(currentCover);
+          } else {
+             setError("This entry could not be found.");
+             setTimeout(() => navigate('/list'), 2000);
+          }
         } else {
-          setError("You don't have permission to edit this entry or it doesn't exist.");
+          setError("You don't have permission to edit this entry.");
           setTimeout(() => navigate('/list'), 2000);
         }
         setIsLoading(false);

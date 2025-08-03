@@ -1,3 +1,8 @@
+export interface User {
+  id: string;
+  name: string;
+}
+
 export interface BookEntry {
   slug: string;
   bookTitle: string;

@@ -1,47 +1,55 @@
-import React, { createContext, useContext } from 'react';
+import React, { createContext, useContext, ReactNode } from 'react';
 import { BrowserRouter, Routes, Route, Link, Outlet, useLocation } from 'react-router-dom';
-import { useEntries } from './hooks/useEntries';
-import { BookEntry, CreatedEntryInfo, EntryUpdatePayload, EntrySummary } from './types';
+import { useApp } from './hooks/useApp';
+import { BookEntry, CreatedEntryInfo, EntryUpdatePayload, EntrySummary, User } from './types';
 import StartPage from './pages/StartPage';
 import CreatePage from './pages/CreatePage';
 import MemoryPage from './pages/MemoryPage';
 import ListPage from './pages/ListPage';
+import AuthPage from './pages/AuthPage';
 import { BookOpenIcon } from './components/ui';
 
 
-interface EntriesContextType {
+interface AppContextType {
+  // User state and functions
+  user: User | null;
+  isLoadingUser: boolean;
+  login: (id: string) => Promise<{ success: boolean; error?: string }>;
+  logout: () => void;
+  createUser: (name: string) => Promise<{ success: boolean; error?: string; user?: User }>;
+
+  // Entries state and functions
   loading: boolean;
   addEntry: (entryData: { bookTitle: string; tagline: string; reflection: string; bookCover?: string | null; }) => Promise<{ success: boolean; error?: string; slug?: string; editKey?: string; }>;
   getEntryBySlug: (slug: string) => Promise<Omit<BookEntry, 'editKey'> | undefined>;
   getEntrySummaries: (slugs: string[]) => Promise<EntrySummary[]>;
   deleteEntry: (slug: string, editKey: string) => Promise<{ success: boolean; error?: string }>;
   updateEntry: (slug: string, editKey: string, data: EntryUpdatePayload) => Promise<{ success: boolean; error?: string; }>;
-  getAllSlugs: () => string[];
   getCreatedEntries: () => CreatedEntryInfo[];
-  removeVisitedSlug: (slug: string) => void;
 }
 
-const EntriesContext = createContext<EntriesContextType | undefined>(undefined);
+const AppContext = createContext<AppContextType | undefined>(undefined);
 
-export const useEntriesContext = () => {
-  const context = useContext(EntriesContext);
+export const useAppContext = () => {
+  const context = useContext(AppContext);
   if (!context) {
-    throw new Error('useEntriesContext must be used within a EntriesProvider');
+    throw new Error('useAppContext must be used within a AppProvider');
   }
   return context;
 };
 
-const EntriesProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const entriesData = useEntries();
+const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+  const appData = useApp();
   return (
-    <EntriesContext.Provider value={entriesData}>
+    <AppContext.Provider value={appData}>
       {children}
-    </EntriesContext.Provider>
+    </AppContext.Provider>
   );
 };
 
 const Header = () => {
     const location = useLocation();
+    const { user, logout } = useAppContext();
     const isHomePage = location.pathname === '/';
     const hideCreateButton = location.pathname.startsWith('/create') || location.pathname.startsWith('/edit');
 
@@ -52,11 +60,19 @@ const Header = () => {
                     <BookOpenIcon className="w-6 h-6 text-teal-600 transition-transform duration-300 group-hover:scale-110" />
                     <span className="font-serif text-xl font-bold group-hover:text-teal-700 transition-colors">Bookfeel</span>
                 </Link>
-                {!hideCreateButton && (
-                    <Link to="/create" className="bg-teal-500 text-white font-bold py-2 px-4 rounded-full text-sm hover:bg-teal-600 transition-colors duration-300 transform hover:scale-105">
-                        + New Entry
-                    </Link>
-                )}
+                <div className="flex items-center space-x-4">
+                    {user && (
+                        <div className="flex items-center space-x-2">
+                            <span className="text-sm text-slate-600 hidden sm:inline">Hi, {user.name}</span>
+                             <button onClick={logout} className="text-sm text-slate-500 hover:text-ink font-semibold">Logout</button>
+                        </div>
+                    )}
+                    {!hideCreateButton && (
+                        <Link to="/create" className="bg-teal-500 text-white font-bold py-2 px-4 rounded-full text-sm hover:bg-teal-600 transition-colors duration-300 transform hover:scale-105">
+                            + New Entry
+                        </Link>
+                    )}
+                </div>
             </nav>
         </header>
     );
@@ -88,22 +104,44 @@ const NotFoundPage = () => (
     </div>
 );
 
+const AuthenticatedRoutes = () => (
+  <Routes>
+    <Route path="/" element={<AppLayout />}>
+      <Route index element={<StartPage />} />
+      <Route path="create" element={<CreatePage />} />
+      <Route path="edit/:slug" element={<CreatePage />} />
+      <Route path="memory/:slug" element={<MemoryPage />} />
+      <Route path="list" element={<ListPage />} />
+      <Route path="*" element={<NotFoundPage />} />
+    </Route>
+  </Routes>
+);
+
+
+const Root = () => {
+  const { user, isLoadingUser } = useAppContext();
+
+  if (isLoadingUser) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-cream">
+        <BookOpenIcon className="w-12 h-12 text-teal-500 animate-spin" />
+      </div>
+    );
+  }
+
+  return (
+    <BrowserRouter>
+      {user ? <AuthenticatedRoutes /> : <AuthPage />}
+    </BrowserRouter>
+  );
+};
+
+
 function App() {
   return (
-    <EntriesProvider>
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<AppLayout />}>
-            <Route index element={<StartPage />} />
-            <Route path="create" element={<CreatePage />} />
-            <Route path="edit/:slug" element={<CreatePage />} />
-            <Route path="memory/:slug" element={<MemoryPage />} />
-            <Route path="list" element={<ListPage />} />
-            <Route path="*" element={<NotFoundPage />} />
-          </Route>
-        </Routes>
-      </BrowserRouter>
-    </EntriesProvider>
+    <AppProvider>
+      <Root />
+    </AppProvider>
   );
 }
 

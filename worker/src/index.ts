@@ -35,6 +35,16 @@ export interface Env {
   R2_BUCKET_NAME: string;
 }
 
+interface CreatedEntryInfo {
+  slug: string;
+  editKey: string;
+}
+interface User {
+  id: string;
+  name: string;
+  entries: CreatedEntryInfo[];
+}
+
 interface BookEntry {
   slug: string;
   bookTitle: string;
@@ -57,6 +67,41 @@ const generateAlphanumericSlug = (length: number = 12): string => {
   }
   return result;
 };
+
+/**
+ * Generates a random numeric string of a given length.
+ * @param length The desired length of the string. Defaults to 10.
+ */
+const generateNumericId = (length: number = 10): string => {
+    const chars = '0123456789';
+    let result = '';
+    for (let i = 0; i < length; i++) {
+        result += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return result;
+}
+
+/**
+ * Generates a unique user ID by checking for its existence in KV.
+ * @param kv The KV namespace to check against.
+ */
+async function getUniqueUserId(kv: KVNamespace): Promise<string> {
+    let id: string;
+    let attempts = 0;
+    const maxAttempts = 20;
+
+    while (attempts < maxAttempts) {
+        id = generateNumericId();
+        const existing = await kv.get(`user_${id}`);
+        if (existing === null) {
+            return id;
+        }
+        attempts++;
+    }
+
+    console.error(`Could not generate unique user ID in ${maxAttempts} attempts.`);
+    throw new Error('Failed to generate a unique user ID.');
+}
 
 
 /**
@@ -87,7 +132,7 @@ async function getUniqueSlug(kv: KVNamespace): Promise<string> {
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, X-Edit-Key",
+  "Access-Control-Allow-Headers": "Content-Type, X-Edit-Key, X-User-ID",
 };
 
 const getR2Client = (env: Env) => {
@@ -112,6 +157,40 @@ export default {
     const path = url.pathname;
 
     // --- Simple Router ---
+
+    // POST /api/users: Create a new user
+    if (request.method === "POST" && path === "/api/users") {
+        try {
+            const { name } = await request.json() as { name: string };
+            if (!name || typeof name !== 'string' || name.trim().length === 0) {
+                return new Response(JSON.stringify({ error: 'Name is required' }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" }});
+            }
+
+            const id = await getUniqueUserId(env.BOOKFEEL_KV);
+            const newUser: User = { id, name: name.trim(), entries: [] };
+
+            await env.BOOKFEEL_KV.put(`user_${id}`, JSON.stringify(newUser));
+
+            return new Response(JSON.stringify({ id, name: newUser.name }), { status: 201, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        } catch(e) {
+            console.error("Error creating user:", e);
+            const errorDetails = e instanceof Error ? e.message : String(e);
+            return new Response(JSON.stringify({ error: `Worker Error: ${errorDetails}` }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+    }
+
+    // GET /api/users/:id: Fetch a user's data for login
+    if (request.method === "GET" && path.startsWith("/api/users/")) {
+        const id = path.substring("/api/users/".length);
+        if (!id) return new Response(JSON.stringify({ error: "User ID is required" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+
+        const userJson = await env.BOOKFEEL_KV.get(`user_${id}`);
+        if (userJson === null) {
+            return new Response(JSON.stringify({ error: "User not found" }), { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+        
+        return new Response(userJson, { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
 
     // POST /api/upload-url: Generates a secure URL for the frontend to upload a file directly to R2.
     if (request.method === "POST" && path === "/api/upload-url") {
@@ -178,6 +257,7 @@ export default {
     if (request.method === "POST" && path === "/api/entry") {
       try {
         const entryData: Omit<BookEntry, 'slug'> = await request.json();
+        const userId = request.headers.get('X-User-ID');
 
         if (!entryData.bookTitle || !entryData.editKey) {
             return new Response(JSON.stringify({ error: 'Book Title and Edit Key are required.' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' }});
@@ -191,6 +271,19 @@ export default {
         };
         
         await env.BOOKFEEL_KV.put(newEntry.slug, JSON.stringify(newEntry));
+
+        // If a user ID is provided, update the user's entry list
+        if (userId) {
+            const userKey = `user_${userId}`;
+            const userJson = await env.BOOKFEEL_KV.get(userKey);
+            if (userJson) {
+                const user: User = JSON.parse(userJson);
+                user.entries.push({ slug: newEntry.slug, editKey: newEntry.editKey });
+                await env.BOOKFEEL_KV.put(userKey, JSON.stringify(user));
+            } else {
+                console.warn(`User with ID ${userId} not found when creating entry ${slug}.`);
+            }
+        }
         
         return new Response(JSON.stringify({ success: true, slug: newEntry.slug }), { status: 201, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       } catch (e) {
@@ -282,6 +375,8 @@ export default {
       // DELETE /api/entry/:slug: Permanently deletes an entry and its images.
       if (request.method === "DELETE") {
         const editKey = request.headers.get('X-Edit-Key');
+        const userId = request.headers.get('X-User-ID');
+
         if (!editKey) {
           return new Response(JSON.stringify({ error: 'Authentication required. Edit key missing.' }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
@@ -322,6 +417,20 @@ export default {
           }
           
           await env.BOOKFEEL_KV.delete(slug);
+
+           // If a user ID is provided, update the user's entry list
+            if (userId) {
+                const userKey = `user_${userId}`;
+                const userJson = await env.BOOKFEEL_KV.get(userKey);
+                if (userJson) {
+                    const user: User = JSON.parse(userJson);
+                    user.entries = user.entries.filter(e => e.slug !== slug);
+                    await env.BOOKFEEL_KV.put(userKey, JSON.stringify(user));
+                } else {
+                    console.warn(`User with ID ${userId} not found when deleting entry ${slug}.`);
+                }
+            }
+
           return new Response(null, { status: 204, headers: corsHeaders });
 
         } catch (e) {

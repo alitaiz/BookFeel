@@ -1,11 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Link } from 'react-router-dom';
-import { useEntriesContext } from '../App';
+import { useAppContext } from '../App';
 import { EntryCard, BookOpenIcon } from '../components/ui';
 import { EntrySummary, CreatedEntryInfo } from '../types';
 
 const ListPage = () => {
-  const { getAllSlugs, deleteEntry, getCreatedEntries, removeVisitedSlug, getEntrySummaries } = useEntriesContext();
+  const { deleteEntry, getCreatedEntries, getEntrySummaries } = useAppContext();
   const [entries, setEntries] = useState<EntrySummary[]>([]);
   const [createdEntries, setCreatedEntries] = useState<CreatedEntryInfo[]>([]);
   const [loading, setLoading] = useState(true);
@@ -15,9 +14,9 @@ const ListPage = () => {
   const loadEntries = useCallback(async () => {
     setLoading(true);
     setError('');
-    const slugs = getAllSlugs();
     const created = getCreatedEntries();
     setCreatedEntries(created);
+    const slugs = created.map(c => c.slug);
 
     if (slugs.length > 0) {
       const fetchedEntries = await getEntrySummaries(slugs);
@@ -27,7 +26,7 @@ const ListPage = () => {
       setEntries([]);
     }
     setLoading(false);
-  }, [getAllSlugs, getCreatedEntries, getEntrySummaries]);
+  }, [getCreatedEntries, getEntrySummaries]);
 
   useEffect(() => {
     loadEntries();
@@ -38,23 +37,17 @@ const ListPage = () => {
     const ownedEntry = createdEntries.find(cm => cm.slug === slug);
 
     if (ownedEntry) {
-      // User is the owner: permanent deletion
       if (window.confirm("Are you sure you want to permanently delete this entry? This will remove all data and photos forever and cannot be undone.")) {
         const result = await deleteEntry(slug, ownedEntry.editKey);
         if (result.success) {
-          // Refresh the list from source of truth
           loadEntries();
         } else {
           setError(result.error || 'An unknown error occurred while deleting.');
         }
       }
     } else {
-      // User is a visitor: remove from local list
-      if (window.confirm("Are you sure you want to remove this entry from your list? This will not delete the original page.")) {
-        removeVisitedSlug(slug);
-        // Refresh the list from source of truth
-        loadEntries();
-      }
+      // This case should ideally not happen in the new user-centric model
+      setError("Cannot delete an entry you do not own.");
     }
   };
 
@@ -68,7 +61,7 @@ const ListPage = () => {
       <div className="container mx-auto max-w-2xl px-4">
         <div className="bg-white/70 backdrop-blur-md p-8 rounded-2xl shadow-xl">
           <h1 className="text-3xl font-bold font-serif text-center text-ink">Your Book Reflections</h1>
-          <p className="text-center text-slate-600 mt-2">A list of reflections you have created or visited.</p>
+          <p className="text-center text-slate-600 mt-2">A list of all the reflections you have created.</p>
           
           <div className="mt-6">
             <input
@@ -91,14 +84,14 @@ const ListPage = () => {
           ) : filteredEntries.length > 0 ? (
             <div className="mt-4 space-y-4">
               {filteredEntries.map(entry => {
-                const isOwner = createdEntries.some(cm => cm.slug === entry.slug);
-                return <EntryCard key={entry.slug} entry={entry} onDelete={handleDelete} isOwner={isOwner} />
+                // In this new model, all listed entries are owned by the user.
+                return <EntryCard key={entry.slug} entry={entry} onDelete={() => handleDelete(entry.slug)} isOwner={true} />
               })}
             </div>
           ) : (
-            <p className="text-center mt-8 text-slate-500">
-              {searchQuery ? `No entries match "${searchQuery}".` : "You haven't created or visited any entries on this device yet."}
-            </p>
+            <div className="text-center mt-8 text-slate-500">
+                <p>{searchQuery ? `No entries match "${searchQuery}".` : "You haven't created any entries yet."}</p>
+            </div>
           )}
         </div>
       </div>

@@ -1,21 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { useEntriesContext } from '../App';
+import { useAppContext } from '../App';
 import { BookOpenIcon } from '../components/ui';
 
 const StartPage = () => {
-  const { getAllSlugs } = useEntriesContext();
+  const { getCreatedEntries, user } = useAppContext();
   const navigate = useNavigate();
-  const [allSlugs, setAllSlugs] = useState<string[]>([]);
+  const [createdEntries, setCreatedEntries] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const slugs = getAllSlugs();
-    setAllSlugs(slugs);
-    // If user has only ever created or visited one entry on this device, redirect them
-    if (slugs.length === 1) {
-      // Use replace to avoid the user being able to click "back" to this page
-      navigate(`/memory/${slugs[0]}`, { replace: true });
+    const entries = getCreatedEntries();
+    setCreatedEntries(entries.map(e => e.slug));
+    
+    if (entries.length === 1) {
+      navigate(`/memory/${entries[0].slug}`, { replace: true });
     } else {
       setLoading(false);
     }
@@ -31,10 +30,10 @@ const StartPage = () => {
     <div className="min-h-screen flex flex-col justify-center bg-cream">
       <div className="absolute inset-0 bg-cover bg-center opacity-20 blur-sm" style={{backgroundImage: "url('https://images.unsplash.com/photo-1507842217343-583bb7270b66?auto=format&fit=crop&w=1200')"}}></div>
       <div className="relative container mx-auto px-6 py-24 text-center">
-        {allSlugs.length > 0 ? (
+        {createdEntries.length > 0 ? (
           <div className="bg-white/60 backdrop-blur-md p-8 rounded-2xl shadow-xl max-w-2xl mx-auto">
-            <h1 className="text-3xl md:text-4xl font-serif font-bold text-ink">Welcome back 📚</h1>
-            <p className="mt-4 text-slate-600">You can find the reflections you've created or visited on this device below.</p>
+            <h1 className="text-3xl md:text-4xl font-serif font-bold text-ink">Welcome back, {user?.name || 'Reader'} 📚</h1>
+            <p className="mt-4 text-slate-600">You can find the reflections you've created on this device below.</p>
             <div className="mt-6">
                 <Link to="/list" className="bg-blue-400 text-white font-semibold py-3 px-6 rounded-full hover:bg-blue-500 transition-colors text-lg transform hover:scale-105 inline-block">View Your Entries</Link>
             </div>
@@ -45,7 +44,7 @@ const StartPage = () => {
               A quiet space to capture your thoughts on the books you've read 📖
             </h1>
             <p className="mt-6 text-lg text-slate-700">
-              Reflect on stories, characters, and ideas that moved you.
+              Reflect on stories, characters, and ideas that moved you, {user?.name}.
             </p>
             <div className="mt-10">
                 <Link to="/create" className="inline-block bg-teal-500 text-white font-bold py-4 px-8 rounded-full hover:bg-teal-600 transition-transform duration-300 text-lg transform hover:scale-105">

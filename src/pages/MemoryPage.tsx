@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { useEntriesContext } from '../App';
+import { useAppContext } from '../App';
 import { BookEntry } from '../types';
 import { BookOpenIcon } from '../components/ui';
 
 const MemoryPage = () => {
   const { slug } = useParams<{ slug: string }>();
-  const { getEntryBySlug, loading, getCreatedEntries, removeVisitedSlug } = useEntriesContext();
+  const { getEntryBySlug, loading, getCreatedEntries } = useAppContext();
   const navigate = useNavigate();
   const [entry, setEntry] = useState<Omit<BookEntry, 'editKey'> | null>(null);
   const [error, setError] = useState('');
@@ -14,7 +14,6 @@ const MemoryPage = () => {
 
   useEffect(() => {
     let isMounted = true;
-    // When slug changes, reset the page state to show loading indicator
     setEntry(null);
     setError('');
     
@@ -31,9 +30,6 @@ const MemoryPage = () => {
           if (foundEntry) {
             setEntry(foundEntry);
           } else {
-            // If entry is not found, it might have been deleted.
-            // Remove it from local history to prevent getting stuck in a redirect loop.
-            removeVisitedSlug(slug);
             setError(`Could not find an entry with code "${slug}".`);
             setTimeout(() => navigate(`/list`), 2500);
           }
@@ -43,7 +39,7 @@ const MemoryPage = () => {
 
     fetchEntry();
     return () => { isMounted = false; };
-  }, [slug, getEntryBySlug, navigate, getCreatedEntries, removeVisitedSlug]);
+  }, [slug, getEntryBySlug, navigate, getCreatedEntries]);
 
   if (loading && !entry) {
     return (
@@ -64,7 +60,6 @@ const MemoryPage = () => {
   }
 
   if (!entry) {
-    // This state is briefly hit before loading starts or if slug is missing.
     return null; 
   }
 
