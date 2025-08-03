@@ -4,7 +4,7 @@ import { EntryCard, BookOpenIcon } from '../components/ui';
 import { EntrySummary, CreatedEntryInfo } from '../types';
 
 const ListPage = () => {
-  const { deleteEntry, getCreatedEntries, getEntrySummaries } = useAppContext();
+  const { deleteEntry, getCreatedEntries, getEntrySummaries, refreshUserEntries } = useAppContext();
   const [entries, setEntries] = useState<EntrySummary[]>([]);
   const [createdEntries, setCreatedEntries] = useState<CreatedEntryInfo[]>([]);
   const [loading, setLoading] = useState(true);
@@ -14,6 +14,11 @@ const ListPage = () => {
   const loadEntries = useCallback(async () => {
     setLoading(true);
     setError('');
+    
+    // First, refresh the list of entry slugs from the server.
+    await refreshUserEntries();
+    
+    // Then, get the (now updated) list from local storage.
     const created = getCreatedEntries();
     setCreatedEntries(created);
     const slugs = created.map(c => c.slug);
@@ -26,7 +31,7 @@ const ListPage = () => {
       setEntries([]);
     }
     setLoading(false);
-  }, [getCreatedEntries, getEntrySummaries]);
+  }, [getCreatedEntries, getEntrySummaries, refreshUserEntries]);
 
   useEffect(() => {
     loadEntries();

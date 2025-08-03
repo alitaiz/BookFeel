@@ -26,6 +26,7 @@ interface AppContextType {
   deleteEntry: (slug: string, editKey: string) => Promise<{ success: boolean; error?: string }>;
   updateEntry: (slug: string, editKey: string, data: EntryUpdatePayload) => Promise<{ success: boolean; error?: string; }>;
   getCreatedEntries: () => CreatedEntryInfo[];
+  refreshUserEntries: () => Promise<{ success: boolean; error?: string }>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);

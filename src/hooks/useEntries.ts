@@ -56,6 +56,29 @@ export const useApp = () => {
      syncCreatedEntries(updated);
   }, [getCreatedEntries, syncCreatedEntries]);
   
+  const refreshUserEntries = useCallback(async (): Promise<{ success: boolean; error?: string }> => {
+    if (!user) {
+        return { success: false, error: "No user is currently logged in." };
+    }
+    
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/users/${user.id}`);
+        if (response.ok) {
+            const fullUser: FullUser = await response.json();
+            syncCreatedEntries(fullUser.entries);
+            return { success: true };
+        } else {
+            const errorData = await response.json().catch(() => ({}));
+            const error = errorData.error || `Failed to refresh user data. Status: ${response.status}`;
+            console.error(error);
+            return { success: false, error };
+        }
+    } catch (error) {
+        console.error("API call to refresh user entries failed:", error);
+        return { success: false, error: "A network error occurred while refreshing your data." };
+    }
+  }, [user, syncCreatedEntries]);
+
   // --- User Authentication ---
   const login = useCallback(async (id: string): Promise<{ success: boolean, error?: string }> => {
     setIsLoadingUser(true);
@@ -260,5 +283,6 @@ export const useApp = () => {
     deleteEntry,
     updateEntry,
     getCreatedEntries,
+    refreshUserEntries,
   };
 };
