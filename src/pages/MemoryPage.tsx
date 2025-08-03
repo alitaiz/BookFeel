@@ -63,7 +63,7 @@ const MemoryPage = () => {
     return null; 
   }
 
-  const coverImage = entry.bookCover || "https://images.unsplash.com/photo-1507842217343-583bb7270b66?auto=format&fit=crop&w=1200&q=80";
+  const coverImage = "https://images.unsplash.com/photo-1507842217343-583bb7270b66?auto=format&fit=crop&w=1200&q=80";
   const formattedDate = new Date(entry.createdAt).toLocaleDateString('en-US', {
     year: 'numeric',
     month: 'long',
