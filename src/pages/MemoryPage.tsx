@@ -2,11 +2,11 @@ import React, { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useAppContext } from '../App';
 import { BookEntry } from '../types';
-import { BookOpenIcon } from '../components/ui';
+import { BookOpenIcon, HeartIcon } from '../components/ui';
 
 const MemoryPage = () => {
   const { slug } = useParams<{ slug: string }>();
-  const { getEntryBySlug, loading, getCreatedEntries } = useAppContext();
+  const { getEntryBySlug, loading, getCreatedEntries, likeEntry, isLiked } = useAppContext();
   const navigate = useNavigate();
   const [entry, setEntry] = useState<Omit<BookEntry, 'editKey'> | null>(null);
   const [error, setError] = useState('');
@@ -40,6 +40,14 @@ const MemoryPage = () => {
     fetchEntry();
     return () => { isMounted = false; };
   }, [slug, getEntryBySlug, navigate, getCreatedEntries]);
+
+  const handleLike = async () => {
+      if (!entry || isLiked(entry.slug)) return;
+      const result = await likeEntry(entry.slug);
+      if (result.success && result.likeCount !== undefined) {
+          setEntry(prev => prev ? { ...prev, likeCount: result.likeCount! } : null);
+      }
+  }
 
   if (loading && !entry) {
     return (
@@ -94,16 +102,30 @@ const MemoryPage = () => {
             )}
           <div className="text-center mb-8 space-y-2">
             <p className="text-sm text-slate-500">Created on {formattedDate}</p>
-            {isOwner && (
-              <div className="flex items-center justify-center space-x-4">
-                <Link to={`/edit/${entry.slug}`} className="text-xs text-slate-500 hover:text-slate-700 underline">
-                    Edit Entry
-                </Link>
+            <div className="flex items-center justify-center space-x-4">
+                {isOwner && (
+                  <Link to={`/edit/${entry.slug}`} className="text-xs text-slate-500 hover:text-slate-700 underline">
+                      Edit Entry
+                  </Link>
+                )}
                 <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${entry.privacy === 'private' ? 'bg-orange-100 text-orange-800' : 'bg-green-100 text-green-800'}`}>
                     {entry.privacy === 'private' ? 'Private' : 'Public'}
                 </span>
-              </div>
-            )}
+                {entry.privacy === 'public' && (
+                    <button
+                        onClick={handleLike}
+                        disabled={isLiked(entry.slug)}
+                        className="flex items-center space-x-1 text-sm text-slate-600 disabled:opacity-50 disabled:cursor-not-allowed group"
+                        title={isLiked(entry.slug) ? 'You have liked this' : 'Like this reflection'}
+                    >
+                        <HeartIcon
+                            className={`w-5 h-5 transition-colors ${isLiked(entry.slug) ? 'text-red-500' : 'text-slate-400 group-hover:text-red-500'}`}
+                            filled={isLiked(entry.slug)}
+                        />
+                        <span>{entry.likeCount || 0}</span>
+                    </button>
+                )}
+            </div>
           </div>
 
           <div className="prose prose-lg max-w-none text-ink whitespace-pre-wrap font-sans text-justify">

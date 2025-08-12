@@ -27,6 +27,11 @@ interface AppContextType {
   updateEntry: (slug: string, editKey: string, data: EntryUpdatePayload) => Promise<{ success: boolean; error?: string; }>;
   getCreatedEntries: () => CreatedEntryInfo[];
   refreshUserEntries: () => Promise<{ success: boolean; error?: string }>;
+
+  // New functions for public feed and likes
+  getPublicFeed: () => Promise<EntrySummary[]>;
+  likeEntry: (slug: string) => Promise<{ success: boolean; likeCount?: number }>;
+  isLiked: (slug: string) => boolean;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);

@@ -5,6 +5,8 @@ import { generateUUID } from '../utils/uuid';
 
 const LOCAL_USER_KEY = 'bookfeel_user';
 const LOCAL_CREATED_ENTRIES_KEY = 'bookfeel_created_entries';
+const LOCAL_LIKED_SLUGS_KEY = 'bookfeel_liked_slugs';
+
 
 interface FullUser extends User {
   entries: CreatedEntryInfo[];
@@ -27,6 +29,29 @@ export const useApp = () => {
       setIsLoadingUser(false);
     }
   }, []);
+
+  // --- Liked entries management ---
+  const getLikedSlugs = useCallback((): string[] => {
+      try {
+          const stored = localStorage.getItem(LOCAL_LIKED_SLUGS_KEY);
+          return stored ? JSON.parse(stored) : [];
+      } catch { return []; }
+  }, []);
+
+  const [likedSlugs, setLikedSlugs] = useState<string[]>(getLikedSlugs);
+
+  const addLikedSlug = useCallback((slug: string) => {
+      const currentLiked = getLikedSlugs();
+      if (!currentLiked.includes(slug)) {
+          const newLiked = [...currentLiked, slug];
+          localStorage.setItem(LOCAL_LIKED_SLUGS_KEY, JSON.stringify(newLiked));
+          setLikedSlugs(newLiked);
+      }
+  }, [getLikedSlugs]);
+
+  const isLiked = useCallback((slug: string) => {
+      return likedSlugs.includes(slug);
+  }, [likedSlugs]);
 
   // --- Local storage management for OWNED entries ---
   const getCreatedEntries = useCallback((): CreatedEntryInfo[] => {
@@ -135,6 +160,41 @@ export const useApp = () => {
   }, []);
 
   // --- API Functions for entries ---
+    const getPublicFeed = useCallback(async (): Promise<EntrySummary[]> => {
+        setLoading(true);
+        try {
+            const response = await fetch(`${API_BASE_URL}/api/entries/public-random`);
+            if (!response.ok) {
+                console.error("API call to getPublicFeed failed:", response.statusText);
+                return [];
+            }
+            const data: EntrySummary[] = await response.json();
+            return data;
+        } catch (error) {
+            console.error("Network error during getPublicFeed:", error);
+            return [];
+        } finally {
+            setLoading(false);
+        }
+    }, []);
+
+    const likeEntry = useCallback(async (slug: string): Promise<{ success: boolean; likeCount?: number }> => {
+        try {
+            const response = await fetch(`${API_BASE_URL}/api/entry/${slug}/like`, {
+                method: 'POST'
+            });
+            if (response.ok) {
+                const data = await response.json();
+                addLikedSlug(slug);
+                return { success: true, likeCount: data.likeCount };
+            }
+            return { success: false };
+        } catch (error) {
+            console.error("API call to likeEntry failed:", error);
+            return { success: false };
+        }
+    }, [addLikedSlug]);
+
   const addEntry = useCallback(async (entryData: { bookTitle: string; tagline: string; reflection: string; bookCover?: string | null; privacy: 'public' | 'private' }): Promise<{ success: boolean; error?: string, slug?: string, editKey?: string }> => {
     if (!user) return { success: false, error: "User not authenticated." };
     setLoading(true);
@@ -291,5 +351,8 @@ export const useApp = () => {
     updateEntry,
     getCreatedEntries,
     refreshUserEntries,
+    getPublicFeed,
+    likeEntry,
+    isLiked,
   };
 };

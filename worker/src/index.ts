@@ -54,7 +54,10 @@ interface BookEntry {
   createdAt: string;
   editKey: string; // The secret key
   privacy: 'public' | 'private';
+  likeCount: number;
 }
+
+const PUBLIC_SLUGS_KEY = '_public_slugs_list';
 
 /**
  * Generates a random alphanumeric string of a given length.
@@ -129,6 +132,27 @@ async function getUniqueSlug(kv: KVNamespace): Promise<string> {
   console.warn(`Could not generate unique slug in ${maxAttempts} attempts. Adding suffix.`);
   return `${generateAlphanumericSlug()}-${Math.random().toString(36).substring(2, 6)}`;
 }
+
+// Helper to manage the list of public slugs
+async function updatePublicSlugsList(kv: KVNamespace, slug: string, action: 'add' | 'remove') {
+    try {
+        const listJson = await kv.get(PUBLIC_SLUGS_KEY);
+        let slugs: string[] = listJson ? JSON.parse(listJson) : [];
+
+        if (action === 'add') {
+            if (!slugs.includes(slug)) {
+                slugs.push(slug);
+            }
+        } else { // remove
+            slugs = slugs.filter(s => s !== slug);
+        }
+
+        await kv.put(PUBLIC_SLUGS_KEY, JSON.stringify(slugs));
+    } catch (e) {
+        console.error(`Failed to update public slugs list for slug ${slug}:`, e);
+    }
+}
+
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -220,6 +244,46 @@ export default {
         return new Response(JSON.stringify({ error: `Worker Error: ${errorDetails}` }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
     }
+    
+    // GET /api/entries/public-random: Get a list of random public entries for the feed.
+    if (request.method === "GET" && path === "/api/entries/public-random") {
+        try {
+            const listJson = await env.BOOKFEEL_KV.get(PUBLIC_SLUGS_KEY);
+            const allPublicSlugs: string[] = listJson ? JSON.parse(listJson) : [];
+
+            // Shuffle and pick up to 10
+            const randomSlugs = allPublicSlugs.sort(() => 0.5 - Math.random()).slice(0, 10);
+
+            if (randomSlugs.length === 0) {
+                return new Response(JSON.stringify([]), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+            }
+            
+            const kvPromises = randomSlugs.map(slug => env.BOOKFEEL_KV.get(slug));
+            const results = await Promise.all(kvPromises);
+            
+            const summaries = results
+                .filter(json => json !== null)
+                .map(json => {
+                    const entry: BookEntry = JSON.parse(json!);
+                    return {
+                        slug: entry.slug,
+                        bookTitle: entry.bookTitle,
+                        createdAt: entry.createdAt,
+                        tagline: entry.tagline,
+                        bookCover: entry.bookCover,
+                        privacy: entry.privacy,
+                        likeCount: entry.likeCount || 0,
+                    };
+                });
+            
+            return new Response(JSON.stringify(summaries), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+
+        } catch (e) {
+            console.error("Error in /api/entries/public-random:", e);
+            const errorDetails = e instanceof Error ? e.message : "Internal Error";
+            return new Response(JSON.stringify({ error: errorDetails }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+    }
 
     // POST /api/entries/list: Get summary data for multiple entries.
     if (request.method === "POST" && path === "/api/entries/list") {
@@ -243,6 +307,7 @@ export default {
                         tagline: entry.tagline,
                         bookCover: entry.bookCover,
                         privacy: entry.privacy || 'public',
+                        likeCount: entry.likeCount || 0,
                     };
                 });
 
@@ -258,7 +323,7 @@ export default {
     // POST /api/entry: Creates a new entry record in KV.
     if (request.method === "POST" && path === "/api/entry") {
       try {
-        const entryData: Omit<BookEntry, 'slug'> = await request.json();
+        const entryData: Omit<BookEntry, 'slug' | 'likeCount'> = await request.json();
         const userId = request.headers.get('X-User-ID');
 
         if (!entryData.bookTitle || !entryData.editKey) {
@@ -271,9 +336,15 @@ export default {
           ...entryData,
           slug: slug,
           privacy: entryData.privacy || 'public',
+          likeCount: 0,
         };
         
         await env.BOOKFEEL_KV.put(newEntry.slug, JSON.stringify(newEntry));
+
+        // If public, add to public list
+        if (newEntry.privacy === 'public') {
+            ctx.waitUntil(updatePublicSlugsList(env.BOOKFEEL_KV, newEntry.slug, 'add'));
+        }
 
         // If a user ID is provided, update the user's entry list
         if (userId) {
@@ -295,6 +366,34 @@ export default {
         return new Response(JSON.stringify({ error: errorDetails }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
     }
+
+    // POST /api/entry/:slug/like: Increments the like count for a public entry
+    if (request.method === "POST" && path.match(/^\/api\/entry\/([a-z0-9]+)\/like$/)) {
+        const slug = path.match(/^\/api\/entry\/([a-z0-9]+)\/like$/)![1];
+        try {
+            const entryJson = await env.BOOKFEEL_KV.get(slug);
+            if (!entryJson) {
+                return new Response(JSON.stringify({ error: 'Entry not found.' }), { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+            }
+
+            const entry: BookEntry = JSON.parse(entryJson);
+            if (entry.privacy !== 'public') {
+                 return new Response(JSON.stringify({ error: 'Cannot like a private entry.' }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+            }
+
+            entry.likeCount = (entry.likeCount || 0) + 1;
+            
+            await env.BOOKFEEL_KV.put(slug, JSON.stringify(entry));
+
+            return new Response(JSON.stringify({ success: true, likeCount: entry.likeCount }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+
+        } catch (e) {
+            const errorDetails = e instanceof Error ? e.message : String(e);
+            console.error(`[Like] Critical failure during like for slug ${slug}:`, errorDetails);
+            return new Response(JSON.stringify({ error: `Failed to like entry. ${errorDetails}` }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+    }
+
 
     // Routes for /api/entry/:slug
     if (path.startsWith("/api/entry/")) {
@@ -388,6 +487,16 @@ export default {
                   privacy: updateData.privacy ?? storedEntry.privacy,
               };
 
+              // Manage public slugs list if privacy changes
+              const privacyChanged = 'privacy' in updateData && updateData.privacy !== storedEntry.privacy;
+              if (privacyChanged) {
+                  if (updatedEntry.privacy === 'public') {
+                      ctx.waitUntil(updatePublicSlugsList(env.BOOKFEEL_KV, slug, 'add'));
+                  } else {
+                      ctx.waitUntil(updatePublicSlugsList(env.BOOKFEEL_KV, slug, 'remove'));
+                  }
+              }
+
               await env.BOOKFEEL_KV.put(slug, JSON.stringify(updatedEntry));
 
               const publicEntryData = { ...updatedEntry };
@@ -427,6 +536,11 @@ export default {
             return new Response(JSON.stringify({ error: 'Forbidden. Invalid edit key.' }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
           }
           
+          // Remove from public slugs list if it was public
+          if (entry.privacy === 'public') {
+              ctx.waitUntil(updatePublicSlugsList(env.BOOKFEEL_KV, slug, 'remove'));
+          }
+
           if (entry.bookCover) {
               const s3 = getR2Client(env);
               try {

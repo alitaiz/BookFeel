@@ -12,6 +12,7 @@ export interface BookEntry {
   createdAt: string; // ISO date string
   editKey: string; // Secret key for editing/deleting
   privacy: 'public' | 'private';
+  likeCount: number;
 }
 
 export interface EntrySummary {
@@ -21,6 +22,7 @@ export interface EntrySummary {
   tagline: string;
   bookCover?: string | null;
   privacy: 'public' | 'private';
+  likeCount: number;
 }
 
 export interface CreatedEntryInfo {
