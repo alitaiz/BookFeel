@@ -11,6 +11,7 @@ export interface BookEntry {
   reflection: string;
   createdAt: string; // ISO date string
   editKey: string; // Secret key for editing/deleting
+  privacy: 'public' | 'private';
 }
 
 export interface EntrySummary {
@@ -19,6 +20,7 @@ export interface EntrySummary {
   createdAt: string;
   tagline: string;
   bookCover?: string | null;
+  privacy: 'public' | 'private';
 }
 
 export interface CreatedEntryInfo {
@@ -31,4 +33,5 @@ export interface EntryUpdatePayload {
   tagline: string;
   reflection: string;
   bookCover?: string | null; // null to remove cover
+  privacy?: 'public' | 'private';
 }

@@ -53,6 +53,7 @@ interface BookEntry {
   reflection: string;
   createdAt: string;
   editKey: string; // The secret key
+  privacy: 'public' | 'private';
 }
 
 /**
@@ -241,6 +242,7 @@ export default {
                         createdAt: entry.createdAt,
                         tagline: entry.tagline,
                         bookCover: entry.bookCover,
+                        privacy: entry.privacy || 'public',
                     };
                 });
 
@@ -268,6 +270,7 @@ export default {
         const newEntry: BookEntry = {
           ...entryData,
           slug: slug,
+          privacy: entryData.privacy || 'public',
         };
         
         await env.BOOKFEEL_KV.put(newEntry.slug, JSON.stringify(newEntry));
@@ -304,10 +307,36 @@ export default {
         if (entryJson === null) {
           return new Response(JSON.stringify({ error: "Entry not found" }), { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
-        // SECURITY: Omit editKey before sending to client
-        const entry: Partial<BookEntry> = JSON.parse(entryJson);
-        delete entry.editKey;
-        return new Response(JSON.stringify(entry), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        
+        const entry: BookEntry = JSON.parse(entryJson);
+
+        // If entry is private, we must verify ownership.
+        if (entry.privacy === 'private') {
+            const userId = request.headers.get('X-User-ID');
+            if (!userId) {
+                // Anonymous user trying to access a private entry. Pretend it doesn't exist.
+                return new Response(JSON.stringify({ error: "Entry not found" }), { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+            }
+
+            const userJson = await env.BOOKFEEL_KV.get(`user_${userId}`);
+            if (!userJson) {
+                // User ID provided is invalid.
+                return new Response(JSON.stringify({ error: "Entry not found" }), { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+            }
+
+            const user: User = JSON.parse(userJson);
+            const isOwner = user.entries.some(e => e.slug === slug);
+
+            if (!isOwner) {
+                // User is valid, but does not own this private entry.
+                return new Response(JSON.stringify({ error: "Entry not found" }), { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+            }
+        }
+        
+        // If public, or if private and user is owner, return the data.
+        const publicEntryData = { ...entry };
+        delete (publicEntryData as Partial<BookEntry>).editKey;
+        return new Response(JSON.stringify(publicEntryData), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
       
       // PUT /api/entry/:slug: Updates an existing entry.
@@ -356,6 +385,7 @@ export default {
                   tagline: updateData.tagline ?? storedEntry.tagline,
                   reflection: updateData.reflection ?? storedEntry.reflection,
                   bookCover: updateData.bookCover === null ? undefined : (updateData.bookCover ?? storedEntry.bookCover),
+                  privacy: updateData.privacy ?? storedEntry.privacy,
               };
 
               await env.BOOKFEEL_KV.put(slug, JSON.stringify(updatedEntry));

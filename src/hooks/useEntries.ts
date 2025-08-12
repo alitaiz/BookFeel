@@ -135,11 +135,11 @@ export const useApp = () => {
   }, []);
 
   // --- API Functions for entries ---
-  const addEntry = useCallback(async (entryData: { bookTitle: string; tagline: string; reflection: string; bookCover?: string | null; }): Promise<{ success: boolean; error?: string, slug?: string, editKey?: string }> => {
+  const addEntry = useCallback(async (entryData: { bookTitle: string; tagline: string; reflection: string; bookCover?: string | null; privacy: 'public' | 'private' }): Promise<{ success: boolean; error?: string, slug?: string, editKey?: string }> => {
     if (!user) return { success: false, error: "User not authenticated." };
     setLoading(true);
     try {
-      const { bookTitle, tagline, reflection, bookCover } = entryData;
+      const { bookTitle, tagline, reflection, bookCover, privacy } = entryData;
       // Generate editKey on the client
       const editKey = generateUUID();
 
@@ -149,6 +149,7 @@ export const useApp = () => {
         reflection,
         editKey,
         bookCover,
+        privacy,
         createdAt: new Date().toISOString(),
       };
 
@@ -177,7 +178,13 @@ export const useApp = () => {
   const getEntryBySlug = useCallback(async (slug: string): Promise<Omit<BookEntry, 'editKey'> | undefined> => {
     setLoading(true);
     try {
-      const response = await fetch(`${API_BASE_URL}/api/entry/${slug}`);
+      const headers: HeadersInit = {};
+      if (user) {
+        headers['X-User-ID'] = user.id;
+      }
+
+      const response = await fetch(`${API_BASE_URL}/api/entry/${slug}`, { headers });
+
       if (!response.ok) {
         return undefined;
       }
@@ -189,7 +196,7 @@ export const useApp = () => {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [user]);
 
   const getEntrySummaries = useCallback(async (slugs: string[]): Promise<EntrySummary[]> => {
     if (slugs.length === 0) {

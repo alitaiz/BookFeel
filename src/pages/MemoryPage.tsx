@@ -30,7 +30,7 @@ const MemoryPage = () => {
           if (foundEntry) {
             setEntry(foundEntry);
           } else {
-            setError(`Could not find an entry with code "${slug}".`);
+            setError(`Could not find an entry with code "${slug}". It may be private or has been deleted.`);
             setTimeout(() => navigate(`/list`), 2500);
           }
         }
@@ -95,10 +95,13 @@ const MemoryPage = () => {
           <div className="text-center mb-8 space-y-2">
             <p className="text-sm text-slate-500">Created on {formattedDate}</p>
             {isOwner && (
-              <div>
+              <div className="flex items-center justify-center space-x-4">
                 <Link to={`/edit/${entry.slug}`} className="text-xs text-slate-500 hover:text-slate-700 underline">
                     Edit Entry
                 </Link>
+                <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${entry.privacy === 'private' ? 'bg-orange-100 text-orange-800' : 'bg-green-100 text-green-800'}`}>
+                    {entry.privacy === 'private' ? 'Private' : 'Public'}
+                </span>
               </div>
             )}
           </div>

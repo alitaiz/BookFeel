@@ -16,6 +16,7 @@ const CreatePage = () => {
   const [bookTitle, setBookTitle] = useState('');
   const [tagline, setTagline] = useState('');
   const [reflection, setReflection] = useState('');
+  const [privacy, setPrivacy] = useState<'public' | 'private'>('public');
   
   const [bookCoverFile, setBookCoverFile] = useState<File | null>(null);
   const [bookCoverPreview, setBookCoverPreview] = useState<string | null>(null);
@@ -90,12 +91,13 @@ const CreatePage = () => {
             setBookTitle(entry.bookTitle);
             setTagline(entry.tagline);
             setReflection(entry.reflection);
+            setPrivacy(entry.privacy || 'public');
             setEditKey(ownerInfo.editKey);
             const currentCover = entry.bookCover || null;
             setExistingBookCover(currentCover);
             setBookCoverPreview(currentCover);
           } else {
-             setError("This entry could not be found.");
+             setError("This entry could not be found or you don't have permission to view it.");
              setTimeout(() => navigate('/list'), 2000);
           }
         } else {
@@ -212,6 +214,7 @@ const CreatePage = () => {
           tagline,
           reflection,
           bookCover: finalCoverUrl,
+          privacy,
         };
         const result = await updateEntry(editSlug, editKey, updatedData);
         if (result.success) {
@@ -233,6 +236,7 @@ const CreatePage = () => {
           tagline,
           reflection,
           bookCover: uploadedCoverUrl,
+          privacy,
         });
 
         if (!result.success || !result.slug) {
@@ -312,6 +316,34 @@ const CreatePage = () => {
                   rows={10} 
                   className="mt-1 block w-full px-4 py-2 border border-slate-300 rounded-md shadow-sm focus:ring-teal-500 focus:border-teal-500" 
                   placeholder="What did this book make you feel? What ideas did it spark? Jot down your unfiltered thoughts..."></textarea>
+              </div>
+
+               <div>
+                <div className="flex items-center justify-between">
+                  <span className="flex-grow flex flex-col pr-4">
+                    <span className="text-sm font-medium text-slate-600 font-serif">Visibility</span>
+                    <span className="text-sm text-slate-500">
+                      {privacy === 'public' ? 'Public: Anyone with the link can view.' : 'Private: Only you can view this entry.'}
+                    </span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setPrivacy(p => p === 'public' ? 'private' : 'public')}
+                    className={`${
+                      privacy === 'public' ? 'bg-teal-500' : 'bg-gray-300'
+                    } relative inline-flex flex-shrink-0 h-6 w-11 border-2 border-transparent rounded-full cursor-pointer transition-colors ease-in-out duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500`}
+                    role="switch"
+                    aria-checked={privacy === 'public'}
+                    disabled={isLoading}
+                  >
+                    <span
+                      aria-hidden="true"
+                      className={`${
+                        privacy === 'public' ? 'translate-x-5' : 'translate-x-0'
+                      } pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow transform ring-0 transition ease-in-out duration-200`}
+                    />
+                  </button>
+                </div>
               </div>
                             
               {error && <p className="text-red-500 text-center">{error}</p>}
