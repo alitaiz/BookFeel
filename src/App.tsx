@@ -31,6 +31,7 @@ interface AppContextType {
   // New functions for public feed and likes
   getPublicFeed: () => Promise<EntrySummary[]>;
   likeEntry: (slug: string) => Promise<{ success: boolean; likeCount?: number }>;
+  unlikeEntry: (slug: string) => Promise<{ success: boolean; likeCount?: number }>;
   isLiked: (slug: string) => boolean;
 }
 

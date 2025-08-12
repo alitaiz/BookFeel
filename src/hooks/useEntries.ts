@@ -49,6 +49,13 @@ export const useApp = () => {
       }
   }, [getLikedSlugs]);
 
+  const removeLikedSlug = useCallback((slug: string) => {
+    const currentLiked = getLikedSlugs();
+    const newLiked = currentLiked.filter(s => s !== slug);
+    localStorage.setItem(LOCAL_LIKED_SLUGS_KEY, JSON.stringify(newLiked));
+    setLikedSlugs(newLiked);
+  }, [getLikedSlugs]);
+
   const isLiked = useCallback((slug: string) => {
       return likedSlugs.includes(slug);
   }, [likedSlugs]);
@@ -194,6 +201,23 @@ export const useApp = () => {
             return { success: false };
         }
     }, [addLikedSlug]);
+
+    const unlikeEntry = useCallback(async (slug: string): Promise<{ success: boolean; likeCount?: number }> => {
+        try {
+            const response = await fetch(`${API_BASE_URL}/api/entry/${slug}/unlike`, {
+                method: 'POST'
+            });
+            if (response.ok) {
+                const data = await response.json();
+                removeLikedSlug(slug);
+                return { success: true, likeCount: data.likeCount };
+            }
+            return { success: false };
+        } catch (error) {
+            console.error("API call to unlikeEntry failed:", error);
+            return { success: false };
+        }
+    }, [removeLikedSlug]);
 
   const addEntry = useCallback(async (entryData: { bookTitle: string; tagline: string; reflection: string; bookCover?: string | null; privacy: 'public' | 'private' }): Promise<{ success: boolean; error?: string, slug?: string, editKey?: string }> => {
     if (!user) return { success: false, error: "User not authenticated." };
@@ -353,6 +377,7 @@ export const useApp = () => {
     refreshUserEntries,
     getPublicFeed,
     likeEntry,
+    unlikeEntry,
     isLiked,
   };
 };

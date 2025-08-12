@@ -6,7 +6,7 @@ import { BookOpenIcon, HeartIcon } from '../components/ui';
 
 const MemoryPage = () => {
   const { slug } = useParams<{ slug: string }>();
-  const { getEntryBySlug, loading, getCreatedEntries, likeEntry, isLiked } = useAppContext();
+  const { getEntryBySlug, loading, getCreatedEntries, likeEntry, unlikeEntry, isLiked } = useAppContext();
   const navigate = useNavigate();
   const [entry, setEntry] = useState<Omit<BookEntry, 'editKey'> | null>(null);
   const [error, setError] = useState('');
@@ -41,11 +41,21 @@ const MemoryPage = () => {
     return () => { isMounted = false; };
   }, [slug, getEntryBySlug, navigate, getCreatedEntries]);
 
-  const handleLike = async () => {
-      if (!entry || isLiked(entry.slug)) return;
-      const result = await likeEntry(entry.slug);
-      if (result.success && result.likeCount !== undefined) {
-          setEntry(prev => prev ? { ...prev, likeCount: result.likeCount! } : null);
+  const handleLikeToggle = async () => {
+      if (!entry) return;
+
+      const currentlyLiked = isLiked(entry.slug);
+
+      if (currentlyLiked) {
+          const result = await unlikeEntry(entry.slug);
+          if (result.success && result.likeCount !== undefined) {
+              setEntry(prev => prev ? { ...prev, likeCount: result.likeCount! } : null);
+          }
+      } else {
+          const result = await likeEntry(entry.slug);
+          if (result.success && result.likeCount !== undefined) {
+              setEntry(prev => prev ? { ...prev, likeCount: result.likeCount! } : null);
+          }
       }
   }
 
@@ -113,9 +123,8 @@ const MemoryPage = () => {
                 </span>
                 {entry.privacy === 'public' && (
                     <button
-                        onClick={handleLike}
-                        disabled={isLiked(entry.slug)}
-                        className="flex items-center space-x-1 text-sm text-slate-600 disabled:opacity-50 disabled:cursor-not-allowed group"
+                        onClick={handleLikeToggle}
+                        className="flex items-center space-x-1 text-sm text-slate-600 group"
                         title={isLiked(entry.slug) ? 'You have liked this' : 'Like this reflection'}
                     >
                         <HeartIcon

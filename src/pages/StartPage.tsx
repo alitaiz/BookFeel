@@ -5,18 +5,30 @@ import { BookOpenIcon, HeartIcon } from '../components/ui';
 import { EntrySummary } from '../types';
 
 const PublicEntryCard = ({ entry }: { entry: EntrySummary }) => {
-    const { likeEntry, isLiked } = useAppContext();
+    const { likeEntry, unlikeEntry, isLiked } = useAppContext();
     const [likes, setLikes] = useState(entry.likeCount || 0);
     const [liked, setLiked] = useState(isLiked(entry.slug));
 
-    const handleLike = async (e: React.MouseEvent) => {
-        e.preventDefault(); // Prevent navigation if the card is wrapped in a link
-        if (liked) return;
+    useEffect(() => {
+        setLiked(isLiked(entry.slug));
+    }, [isLiked, entry.slug]);
 
-        const result = await likeEntry(entry.slug);
-        if (result.success && result.likeCount !== undefined) {
-            setLikes(result.likeCount);
-            setLiked(true);
+    const handleLikeToggle = async (e: React.MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+
+        if (liked) {
+            const result = await unlikeEntry(entry.slug);
+            if (result.success && result.likeCount !== undefined) {
+                setLikes(result.likeCount);
+                setLiked(false);
+            }
+        } else {
+            const result = await likeEntry(entry.slug);
+            if (result.success && result.likeCount !== undefined) {
+                setLikes(result.likeCount);
+                setLiked(true);
+            }
         }
     }
 
@@ -38,12 +50,11 @@ const PublicEntryCard = ({ entry }: { entry: EntrySummary }) => {
                 </div>
                 <div className="mt-auto pt-3 flex justify-end items-center">
                     <button
-                        onClick={handleLike}
-                        disabled={liked}
-                        className="flex items-center space-x-1.5 text-slate-600 disabled:cursor-not-allowed"
+                        onClick={handleLikeToggle}
+                        className="flex items-center space-x-1.5 text-slate-600 group/like"
                         aria-label={`Like this entry. Current likes: ${likes}`}
                     >
-                        <HeartIcon className={`w-5 h-5 transition-all ${liked ? 'text-red-500' : 'text-slate-400 group-hover:text-red-400'}`} filled={liked} />
+                        <HeartIcon className={`w-5 h-5 transition-all ${liked ? 'text-red-500' : 'text-slate-400 group-hover/like:text-red-400'}`} filled={liked} />
                         <span className="font-semibold text-sm">{likes}</span>
                     </button>
                 </div>

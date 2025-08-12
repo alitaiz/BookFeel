@@ -245,38 +245,74 @@ export default {
       }
     }
     
-    // GET /api/entries/public-random: Get a list of random public entries for the feed.
+    // GET /api/entries/public-random: Get a curated list of public entries for the feed.
     if (request.method === "GET" && path === "/api/entries/public-random") {
         try {
             const listJson = await env.BOOKFEEL_KV.get(PUBLIC_SLUGS_KEY);
             const allPublicSlugs: string[] = listJson ? JSON.parse(listJson) : [];
 
-            // Shuffle and pick up to 10
-            const randomSlugs = allPublicSlugs.sort(() => 0.5 - Math.random()).slice(0, 10);
-
-            if (randomSlugs.length === 0) {
+            if (allPublicSlugs.length === 0) {
                 return new Response(JSON.stringify([]), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
             }
             
-            const kvPromises = randomSlugs.map(slug => env.BOOKFEEL_KV.get(slug));
+            const kvPromises = allPublicSlugs.map(slug => env.BOOKFEEL_KV.get(slug));
             const results = await Promise.all(kvPromises);
             
-            const summaries = results
-                .filter(json => json !== null)
-                .map(json => {
-                    const entry: BookEntry = JSON.parse(json!);
-                    return {
-                        slug: entry.slug,
-                        bookTitle: entry.bookTitle,
-                        createdAt: entry.createdAt,
-                        tagline: entry.tagline,
-                        bookCover: entry.bookCover,
-                        privacy: entry.privacy,
-                        likeCount: entry.likeCount || 0,
-                    };
-                });
+            const allEntries: BookEntry[] = results
+                .filter((json): json is string => json !== null)
+                .map(json => JSON.parse(json));
             
-            return new Response(JSON.stringify(summaries), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+            // --- New Feed Logic ---
+            const shuffle = <T>(array: T[]): T[] => {
+                for (let i = array.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [array[i], array[j]] = [array[j], array[i]];
+                }
+                return array;
+            };
+
+            const sortedByLikes = [...allEntries].sort((a, b) => (b.likeCount || 0) - (a.likeCount || 0));
+            const sortedByDate = [...allEntries].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+            // Get 5 from top 20 liked
+            const topLikedPool = sortedByLikes.slice(0, 20);
+            const highLikedSample = shuffle(topLikedPool).slice(0, 5);
+
+            // Get 5 from top 20 newest, ensuring no duplicates from liked sample
+            const newestPool = sortedByDate.slice(0, 20);
+            const newSample = shuffle(newestPool).slice(0, 10); // get more to have buffer for filtering
+
+            const finalEntries = new Map<string, BookEntry>();
+            highLikedSample.forEach(entry => finalEntries.set(entry.slug, entry));
+            
+            for (const entry of newSample) {
+                if (finalEntries.size >= 10) break;
+                if (!finalEntries.has(entry.slug)) {
+                    finalEntries.set(entry.slug, entry);
+                }
+            }
+            
+            // If we still don't have 10, fill with random entries
+            if (finalEntries.size < 10 && allEntries.length > finalEntries.size) {
+                 const remainingPool = shuffle(allEntries.filter(entry => !finalEntries.has(entry.slug)));
+                 for (const entry of remainingPool) {
+                     if (finalEntries.size >= 10) break;
+                     finalEntries.set(entry.slug, entry);
+                 }
+            }
+            
+            const summaries = Array.from(finalEntries.values()).map(entry => ({
+                slug: entry.slug,
+                bookTitle: entry.bookTitle,
+                createdAt: entry.createdAt,
+                tagline: entry.tagline,
+                bookCover: entry.bookCover,
+                privacy: entry.privacy,
+                likeCount: entry.likeCount || 0,
+            }));
+
+            // Final shuffle to mix liked and new posts
+            return new Response(JSON.stringify(shuffle(summaries)), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
         } catch (e) {
             console.error("Error in /api/entries/public-random:", e);
@@ -391,6 +427,33 @@ export default {
             const errorDetails = e instanceof Error ? e.message : String(e);
             console.error(`[Like] Critical failure during like for slug ${slug}:`, errorDetails);
             return new Response(JSON.stringify({ error: `Failed to like entry. ${errorDetails}` }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+    }
+
+    // POST /api/entry/:slug/unlike: Decrements the like count for a public entry
+    if (request.method === "POST" && path.match(/^\/api\/entry\/([a-z0-9]+)\/unlike$/)) {
+        const slug = path.match(/^\/api\/entry\/([a-z0-9]+)\/unlike$/)![1];
+        try {
+            const entryJson = await env.BOOKFEEL_KV.get(slug);
+            if (!entryJson) {
+                return new Response(JSON.stringify({ error: 'Entry not found.' }), { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+            }
+
+            const entry: BookEntry = JSON.parse(entryJson);
+            if (entry.privacy !== 'public') {
+                 return new Response(JSON.stringify({ error: 'Cannot unlike a private entry.' }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+            }
+
+            entry.likeCount = Math.max(0, (entry.likeCount || 0) - 1);
+            
+            await env.BOOKFEEL_KV.put(slug, JSON.stringify(entry));
+
+            return new Response(JSON.stringify({ success: true, likeCount: entry.likeCount }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+
+        } catch (e) {
+            const errorDetails = e instanceof Error ? e.message : String(e);
+            console.error(`[Unlike] Critical failure for slug ${slug}:`, errorDetails);
+            return new Response(JSON.stringify({ error: `Failed to unlike entry. ${errorDetails}` }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
     }
 
