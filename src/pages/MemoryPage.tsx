@@ -91,7 +91,7 @@ const MemoryPage = () => {
   return (
     <div className="min-h-screen bg-paper">
       {/* Hero Section */}
-      <div className="relative min-h-[20rem] md:min-h-[24rem] w-full flex items-start justify-center text-white text-center pb-16 pt-24">
+      <div className="relative min-h-[20rem] md:min-h-[24rem] w-full flex items-start justify-center text-white text-center pb-40 pt-24">
         <div className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: `url(${coverImage})` }}></div>
         <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/40 to-transparent"></div>
         <div className="relative z-10 p-4 max-w-3xl mx-auto">
