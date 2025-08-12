@@ -91,11 +91,11 @@ const MemoryPage = () => {
   return (
     <div className="min-h-screen bg-paper">
       {/* Hero Section */}
-      <div className="relative h-80 md:h-96 w-full flex items-center justify-center text-white text-center pb-16">
+      <div className="relative min-h-[20rem] md:min-h-[24rem] w-full flex items-start justify-center text-white text-center pb-16 pt-24">
         <div className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: `url(${coverImage})` }}></div>
         <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/40 to-transparent"></div>
         <div className="relative z-10 p-4 max-w-3xl mx-auto">
-          <h1 className="text-5xl md:text-7xl font-bold font-serif drop-shadow-lg">{entry.bookTitle}</h1>
+          <h1 className="text-5xl md:text-7xl font-bold font-serif drop-shadow-lg break-words">{entry.bookTitle}</h1>
           <p className="mt-4 text-xl font-serif italic drop-shadow-md">"{entry.tagline || 'A story to remember.'}"</p>
         </div>
       </div>
