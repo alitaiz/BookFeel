@@ -12,7 +12,7 @@ const AuthPage = () => {
   }
 
   return (
-    <div className="min-h-screen bg-cream flex items-center justify-center pt-20 px-4">
+    <div className="min-h-screen bg-cream flex items-center justify-center px-4">
       <div className="max-w-md w-full">
         <div className="bg-white/70 backdrop-blur-md p-8 rounded-2xl shadow-xl text-center">
           <BookOpenIcon className="w-16 h-16 text-teal-600 mx-auto mb-4" />
@@ -117,7 +117,7 @@ const ShowIdPage = ({ user }: { user: User }) => {
     };
 
     return (
-        <div className="min-h-screen bg-cream flex items-center justify-center pt-20 px-4">
+        <div className="min-h-screen bg-cream flex items-center justify-center px-4">
           <div className="max-w-md w-full">
             <div className="bg-white/70 backdrop-blur-md p-8 rounded-2xl shadow-xl text-center">
                 <h1 className="text-2xl font-bold font-serif text-ink">Welcome, {user.name}!</h1>
